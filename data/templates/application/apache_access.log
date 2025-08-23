@@ -1,0 +1,5 @@
+{{external_ip}} - {{username}} [{{timestamp_apache}}] "{{http_method}} {{url_path}} HTTP/1.1" {{http_status}} {{response_size}} "{{referer}}" "{{user_agent}}"
+{{external_ip}} - - [{{timestamp_apache}}] "{{http_method}} {{url_path}} HTTP/1.1" {{http_status}} {{response_size}} "-" "{{user_agent}}"
+{{external_ip}} - {{username}} [{{timestamp_apache}}] "{{http_method}} {{url_path}} HTTP/1.1" {{http_status}} {{response_size}} "https://{{hostname}}{{url_path}}" "{{user_agent}}"
+{{external_ip}} - - [{{timestamp_apache}}] "{{http_method}} {{url_path}} HTTP/1.0" {{http_status}} {{response_size}} "-" "-"
+{{external_ip}} - {{username}} [{{timestamp_apache}}] "{{http_method}} {{url_path}}?{{random_choice:id:user:page:action}}={{random_int:1:1000}} HTTP/1.1" {{http_status}} {{response_size}} "{{referer}}" "{{user_agent}}"

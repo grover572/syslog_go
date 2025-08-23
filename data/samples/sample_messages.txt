@@ -1,0 +1,10 @@
+Jan 15 10:30:45 web-server-01 apache2[12345]: 192.168.1.100 - admin [15/Jan/2024:10:30:45 +0800] "GET /index.html HTTP/1.1" 200 2048
+Jan 15 10:30:46 db-server-01 mysql[23456]: [Warning] Access denied for user 'guest'@'192.168.1.200' (using password: YES)
+Jan 15 10:30:47 firewall-01 kernel: [UFW BLOCK] IN=eth0 OUT= SRC=203.0.113.10 DST=192.168.1.100 PROTO=TCP SPT=12345 DPT=22
+Jan 15 10:30:48 mail-server-01 postfix/smtpd[34567]: connect from unknown[198.51.100.25]
+Jan 15 10:30:49 dns-server-01 named[45678]: client 8.8.8.8#53: query: example.com IN A + (192.168.1.53)
+Jan 15 10:30:50 proxy-server-01 squid[56789]: 192.168.1.150 TCP_MISS/200 1024 GET http://www.example.com/
+Jan 15 10:30:51 app-server-01 java[67890]: Exception in thread "main" java.lang.NullPointerException
+Jan 15 10:30:52 backup-server-01 rsync[78901]: sent 1048576 bytes  received 512 bytes  total size 2097152
+Jan 15 10:30:53 monitor-server-01 nagios[89012]: SERVICE ALERT: web-server-01;HTTP;CRITICAL;HARD;3;Connection refused
+Jan 15 10:30:54 load-balancer-01 haproxy[90123]: Server web-server-02/web-02 is DOWN, reason: Layer4 connection problem
