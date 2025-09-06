@@ -25,5 +25,9 @@ rpm:
 	chmod +x scripts/build_rpm.sh
 	./scripts/build_rpm.sh
 
+test-build:
+	chmod +x scripts/test_build.sh
+	./scripts/test_build.sh
+
 clean:
 	@rm -f syslog_go

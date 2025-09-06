@@ -1,0 +1,31 @@
+# Go编译输出
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试二进制文件
+*.test
+
+# 覆盖率工具输出
+*.out
+
+# 依赖目录
+vendor/
+
+# IDE目录
+.idea/
+.vscode/
+
+# macOS系统文件
+.DS_Store
+
+# 项目特定文件
+dist/
+_output/
+*.rpm
+~/rpmbuild/
+
+# 日志文件
+*.log

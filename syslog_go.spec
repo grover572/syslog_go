@@ -8,6 +8,7 @@ URL:            https://github.com/yourusername/syslog_go
 Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  golang-1.20
+ExclusiveArch: x86_64 aarch64
 
 %description
 A versatile syslog tool that supports both client and server functionality,
@@ -17,7 +18,7 @@ with features for sending custom syslog messages and mocking syslog servers.
 %autosetup
 
 %build
-go build -o %{name}
+GOOS=${GOOS:-linux} GOARCH=${GOARCH:-amd64} go build -o %{name}
 
 %install
 rm -rf %{buildroot}

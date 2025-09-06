@@ -2,36 +2,99 @@ name: Release RPM Package
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号（例如：1.0.0）'
+        required: true
+        default: '0.0.1'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Windows x86_64
+          - os: windows-latest
+            arch: amd64
+            platform: windows
+          # Linux x86_64
+          - os: ubuntu-latest
+            arch: amd64
+            platform: linux
+          # Linux ARM64
+          - os: ubuntu-latest
+            arch: arm64
+            platform: linux
+          # macOS x86_64
+          - os: macos-latest
+            arch: amd64
+            platform: darwin
+          # macOS ARM64
+          - os: macos-latest
+            arch: arm64
+            platform: darwin
+          # CentOS x86_64 (using container)
+          - os: ubuntu-latest
+            arch: amd64
+            platform: centos
+            container: centos:7
+          # CentOS ARM64 (using container)
+          - os: ubuntu-latest
+            arch: arm64
+            platform: centos
+            container: centos:7
+
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v4
         with:
           go-version: '1.20'
 
-      - name: Install RPM build tools and Go
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm
-          # 添加Go仓库
-          sudo add-apt-repository ppa:longsleep/golang-backports
-          sudo apt-get update
-          sudo apt-get install -y golang-1.20
+      - name: Set up QEMU
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
-      - name: Get version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: Install RPM build tools
+        run: |
+          if [ "${{ matrix.platform }}" = "centos" ]; then
+            yum install -y rpm-build
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y rpm
+          elif [ "${{ matrix.platform }}" = "darwin" ]; then
+            brew install rpm
+          fi
+
+      - name: Set version
+        id: set_version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+          else
+            echo "VERSION=${{ github.event.inputs.version || '0.0.1' }}" >> $GITHUB_ENV
+          fi
 
       - name: Build RPM package
         run: |
-          # 创建rpmbuild目录结构
+          GOOS=${{ matrix.platform }} GOARCH=${{ matrix.arch }} make rpm
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: rpm-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ~/rpmbuild/RPMS/**/*.rpmbuild目录结构
           mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
           
           # 创建源码包

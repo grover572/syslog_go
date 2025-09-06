@@ -12,6 +12,24 @@ if ! command -v rpmbuild &> /dev/null; then
     exit 1
 fi
 
+# 设置默认的构建平台和架构
+GOOS=${GOOS:-$(go env GOOS)}
+GOARCH=${GOARCH:-$(go env GOARCH)}
+
+# 验证平台和架构组合是否有效
+case "${GOOS}_${GOARCH}" in
+    "linux_amd64"|"linux_arm64"|"darwin_amd64"|"darwin_arm64"|"windows_amd64"|"centos_amd64"|"centos_arm64")
+        ;;
+    *)
+        echo "错误：不支持的平台和架构组合：${GOOS}_${GOARCH}"
+        echo "支持的组合：linux_amd64, linux_arm64, darwin_amd64, darwin_arm64, windows_amd64, centos_amd64, centos_arm64"
+        exit 1
+        ;;
+esac
+
+# 导出构建变量
+export GOOS GOARCH
+
 # 设置变量
 NAME="syslog_go"
 VERSION="1.0.0"
