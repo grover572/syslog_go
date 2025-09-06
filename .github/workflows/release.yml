@@ -87,22 +87,28 @@ jobs:
             echo "VERSION=${{ github.event.inputs.version || '0.0.1' }}" >> $GITHUB_ENV
           fi
 
-      - name: Build RPM package
+      - name: Build package
         run: |
-          GOOS=${{ matrix.platform }} GOARCH=${{ matrix.arch }} make rpm
+          if [ "${{ matrix.platform }}" = "centos" ]; then
+            GOOS=linux GOARCH=${{ matrix.arch }} make rpm
+          else
+            GOOS=${{ matrix.platform }} GOARCH=${{ matrix.arch }} go build -o syslog_go
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rpm-${{ matrix.platform }}-${{ matrix.arch }}
-          path: ~/rpmbuild/RPMS/**/*.rpm
+          name: syslog_go-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            ${{ matrix.platform == 'centos' && '~/rpmbuild/RPMS/**/*.rpm' || 'syslog_go' }}
 
       - name: Create Release
         id: create_release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ~/rpmbuild/RPMS/x86_64/syslog_go-*.rpm
+            ${{ matrix.platform == 'centos' && '~/rpmbuild/RPMS/**/*.rpm' || 'syslog_go' }}
           draft: false
           prerelease: false
         env:
