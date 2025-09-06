@@ -7,7 +7,7 @@ License:        MIT
 URL:            https://github.com/yourusername/syslog_go
 Source0:        %{name}-%{version}.tar.gz
 
-BuildRequires:  golang >= 1.20
+BuildRequires:  golang-1.20
 
 %description
 A versatile syslog tool that supports both client and server functionality,
