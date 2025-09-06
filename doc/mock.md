@@ -2,270 +2,131 @@
 
 ## 核心组件
 
-### MockServer（mock/server.go）
+### Mock命令（cmd/root.go）
 
-模拟Syslog服务器的主要实现，负责接收和验证消息。
+Mock命令用于生成模拟数据，支持模板变量替换。
 
 ```go
-type MockServer struct {
-    config     *config.Config
-    listener   net.Listener
-    udpConn    *net.UDPConn
-    messages   chan string
-    done       chan struct{}
-    statistics *Statistics
+var mockCmd = &cobra.Command{
+    Use:   "mock",
+    Short: "生成模拟数据",
+    Long:  `生成模拟数据...
 }
 ```
 
-主要方法：
-- `NewMockServer(config *config.Config)`: 创建新的Mock服务器实例
-- `Start()`: 启动服务器
-- `Stop()`: 停止服务器
-- `GetStatistics()`: 获取统计信息
-
-### MessageValidator（mock/validator.go）
-
-消息验证器，负责验证接收到的消息格式和内容。
-
-```go
-type MessageValidator struct {
-    engine *template.Engine
-    rules  []ValidationRule
-}
-```
-
-主要方法：
-- `NewMessageValidator(engine *template.Engine)`: 创建消息验证器
-- `AddRule(rule ValidationRule)`: 添加验证规则
-- `Validate(message string)`: 验证消息
+主要参数：
+- `message`: 指定消息模板
+- `output`: 输出文件路径
+- `count`: 生成消息的数量
+- `append`: 追加到输出文件
 
 ## 实现流程
 
-### 1. 服务器初始化
+### 1. 模板引擎初始化
 
 ```go
-// 创建Mock服务器
-func NewMockServer(config *config.Config) (*MockServer, error) {
-    // 初始化模板引擎
-    engine := template.NewEngine(config.TemplatePath, config.Verbose)
-    
-    // 创建消息验证器
-    validator := NewMessageValidator(engine)
-    
-    // 初始化统计信息
-    stats := NewStatistics()
-    
-    return &MockServer{
-        config:     config,
-        messages:   make(chan string, 1000),
-        done:       make(chan struct{}),
-        statistics: stats,
-        validator:  validator,
-    }, nil
+// 创建模板引擎
+configPath := "template.yml"
+if _, err := os.Stat(configPath); os.IsNotExist(err) {
+    configPath = "" // 如果文件不存在，使用空字符串
+}
+verbose := viper.GetBool("verbose")
+engine := template.NewEngine(configPath, verbose)
+```
+
+### 2. 消息生成流程
+
+```go
+// 加载消息模板
+engine.LoadTemplate("message", mockMessage)
+
+// 生成指定数量的消息
+var messages []string
+for i := 0; i < mockCount; i++ {
+    msg, err := engine.GenerateMessage("message")
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "生成第 %d 条消息时出错: %v\n", i+1, err)
+        os.Exit(1)
+    }
+    messages = append(messages, msg)
 }
 ```
 
-### 2. 消息接收流程
+## 变量解析
+
+### 1. 变量类型
+
+- 网络变量：RANDOM_IP、RANGE_IP、MAC等
+- 时间变量：TIMESTAMP
+- 随机数据：RANDOM_INT、RANDOM_STRING
+
+### 2. 解析实现
 
 ```go
-// TCP消息处理
-func (s *MockServer) handleTCPConnection(conn net.Conn) {
-    defer conn.Close()
-    reader := bufio.NewReader(conn)
-    
-    for {
-        // 读取消息
-        message, err := reader.ReadString('\n')
+// processTemplate 处理模板
+func (e *Engine) processTemplate(template string) (string, error) {
+    // 匹配变量表达式 {{变量名:参数}}
+    varRegex := regexp.MustCompile(`\{\{\s*([^{}]+?)\s*\}\}`)
+
+    // 替换所有变量
+    result := varRegex.ReplaceAllStringFunc(template, func(match string) string {
+        // 提取变量表达式
+        expr := varRegex.FindStringSubmatch(match)[1]
+
+        // 使用变量解析器
+        value, err := e.parser.Parse(expr)
         if err != nil {
-            return
+            return match
         }
-        
-        // 验证消息
-        if err := s.validator.Validate(message); err != nil {
-            s.statistics.IncrementInvalid()
-            continue
-        }
-        
-        s.messages <- message
-        s.statistics.IncrementValid()
-    }
-}
+        return value
+    })
 
-// UDP消息处理
-func (s *MockServer) handleUDPMessages() {
-    buffer := make([]byte, 65535)
-    for {
-        n, _, err := s.udpConn.ReadFromUDP(buffer)
-        if err != nil {
-            continue
-        }
-        
-        message := string(buffer[:n])
-        if err := s.validator.Validate(message); err != nil {
-            s.statistics.IncrementInvalid()
-            continue
-        }
-        
-        s.messages <- message
-        s.statistics.IncrementValid()
-    }
-}
-```
-
-### 3. 消息验证
-
-```go
-// 验证规则接口
-type ValidationRule interface {
-    Validate(message string) error
-}
-
-// Syslog格式验证
-type SyslogFormatRule struct{}
-
-func (r *SyslogFormatRule) Validate(message string) error {
-    if !syslog.IsValidFormat(message) {
-        return errors.New("invalid syslog format")
-    }
-    return nil
-}
-
-// 模板变量验证
-type TemplateVariableRule struct {
-    engine *template.Engine
-}
-
-func (r *TemplateVariableRule) Validate(message string) error {
-    return r.engine.ValidateVariables(message)
-}
-```
-
-## 性能优化
-
-### 1. 并发处理
-
-```go
-// 工作协程池
-type WorkerPool struct {
-    workers chan struct{}
-    tasks   chan func()
-}
-
-// 并发处理消息
-func (s *MockServer) processMessages() {
-    pool := NewWorkerPool(s.config.Workers)
-    for message := range s.messages {
-        msg := message // 创建副本
-        pool.Submit(func() {
-            s.processMessage(msg)
-        })
-    }
-}
-```
-
-### 2. 缓冲优化
-
-```go
-// 消息缓冲池
-var bufferPool = sync.Pool{
-    New: func() interface{} {
-        return make([]byte, 0, 4096)
-    },
-}
-
-// 获取缓冲区
-func getBuffer() []byte {
-    return bufferPool.Get().([]byte)
-}
-
-// 释放缓冲区
-func releaseBuffer(buf []byte) {
-    buf = buf[:0]
-    bufferPool.Put(buf)
+    return strings.TrimSpace(result), nil
 }
 ```
 
 ## 错误处理
 
-### 1. 网络错误处理
+### 1. 模板错误
+
+- 验证模板格式
+- 检查变量语法
+- 处理变量解析错误
+
+### 2. 输出错误
+
+- 文件写入错误处理
+- 追加模式错误处理
+
+## 输出处理
+
+### 1. 文件输出
 
 ```go
-// 处理监听错误
-func (s *MockServer) handleListenError(err error) {
-    if opErr, ok := err.(*net.OpError); ok {
-        if opErr.Op == "listen" {
-            // 处理端口占用错误
-            s.handlePortInUse(opErr)
-        } else {
-            // 处理其他网络错误
-            s.handleNetworkError(opErr)
+if mockOutput != "" {
+    if mockAppend {
+        // 追加模式
+        f, err := os.OpenFile(mockOutput, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "打开输出文件失败: %v\n", err)
+            os.Exit(1)
+        }
+        defer f.Close()
+        
+        _, err = f.WriteString(output)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "写入输出文件失败: %v\n", err)
+            os.Exit(1)
+        }
+    } else {
+        // 覆盖模式
+        err = os.WriteFile(mockOutput, []byte(output), 0644)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "写入输出文件失败: %v\n", err)
+            os.Exit(1)
         }
     }
-}
-```
-
-### 2. 验证错误处理
-
-```go
-// 处理验证错误
-func (s *MockServer) handleValidationError(err error) {
-    switch err := err.(type) {
-    case *template.VariableError:
-        // 处理变量错误
-        s.statistics.IncrementVariableErrors()
-    case *syslog.FormatError:
-        // 处理格式错误
-        s.statistics.IncrementFormatErrors()
-    default:
-        // 处理其他错误
-        s.statistics.IncrementOtherErrors()
-    }
-}
-```
-
-## 监控统计
-
-### 1. 性能指标收集
-
-```go
-type Statistics struct {
-    TotalReceived      uint64
-    ValidMessages      uint64
-    InvalidMessages    uint64
-    VariableErrors     uint64
-    FormatErrors       uint64
-    OtherErrors        uint64
-    AverageProcessTime float64
-    mutex             sync.RWMutex
-}
-
-// 更新统计信息
-func (s *Statistics) Update(valid bool, processTime time.Duration) {
-    s.mutex.Lock()
-    defer s.mutex.Unlock()
-    
-    s.TotalReceived++
-    if valid {
-        s.ValidMessages++
-        s.updateProcessTime(processTime)
-    } else {
-        s.InvalidMessages++
-    }
-}
-```
-
-### 2. 状态报告
-
-```go
-// 生成状态报告
-func (s *MockServer) GenerateReport() *Report {
-    stats := s.statistics.GetSnapshot()
-    return &Report{
-        Duration:          time.Since(s.startTime),
-        MessagesPerSec:    float64(stats.TotalReceived) / time.Since(s.startTime).Seconds(),
-        ValidationRate:    float64(stats.ValidMessages) / float64(stats.TotalReceived),
-        AverageProcessTime: stats.AverageProcessTime,
-        ErrorBreakdown:    s.getErrorBreakdown(),
-    }
+} else {
+    fmt.Print(output)
 }
 ```

@@ -2,52 +2,50 @@
 
 ## 核心组件
 
-### Config（config/config.go）
+### Config（pkg/config/config.go）
 
 配置管理的主要实现，负责配置的加载、验证和访问。
 
 ```go
 type Config struct {
-    // 基本配置
-    Protocol    string `yaml:"protocol"`    // 协议类型：tcp/udp
-    Host        string `yaml:"host"`        // 目标主机
-    Port        int    `yaml:"port"`        // 目标端口
-    SourceIP    string `yaml:"source_ip"`   // 源IP地址
-    
-    // 性能配置
-    EPS         int    `yaml:"eps"`         // 每秒发送消息数
-    Workers     int    `yaml:"workers"`     // 工作协程数
-    BufferSize  int    `yaml:"buffer_size"` // 缓冲区大小
-    
-    // 模板配置
-    TemplatePath string `yaml:"template_path"` // 模板文件路径
-    Variables    map[string]Variable `yaml:"variables"` // 自定义变量
-    
-    // 调试配置
-    Verbose     bool   `yaml:"verbose"`     // 是否输出详细日志
-    LogLevel    string `yaml:"log_level"`   // 日志级别
+    // 基础配置
+    Target   string `mapstructure:"target" yaml:"target"`       // 目标服务器地址
+    SourceIP string `mapstructure:"source_ip" yaml:"source_ip"` // 源IP地址
+    Protocol string `mapstructure:"protocol" yaml:"protocol"`   // 传输协议
+
+    // Syslog配置
+    Format   string `mapstructure:"format" yaml:"format"`     // Syslog格式
+    Facility int    `mapstructure:"facility" yaml:"facility"` // Facility值
+    Severity int    `mapstructure:"severity" yaml:"severity"` // Severity值
+
+    // 发送控制
+    EPS      int           `mapstructure:"eps" yaml:"eps"`           // 每秒事件数
+    Duration time.Duration `mapstructure:"duration" yaml:"duration"` // 发送持续时间
+
+    // 数据源配置
+    TemplateDir  string `mapstructure:"template_dir" yaml:"template_dir"`   // 模板目录
+    TemplateFile string `mapstructure:"template_file" yaml:"template_file"` // 指定模板文件
+    DataFile     string `mapstructure:"data_file" yaml:"data_file"`         // 数据文件
+    Message      string `mapstructure:"message" yaml:"message"`             // 消息内容
+
+    // 高级配置
+    Concurrency int           `mapstructure:"concurrency" yaml:"concurrency"` // 并发连接数
+    RetryCount  int           `mapstructure:"retry_count" yaml:"retry_count"` // 重试次数
+    Timeout     time.Duration `mapstructure:"timeout" yaml:"timeout"`         // 连接超时
+    BufferSize  int           `mapstructure:"buffer_size" yaml:"buffer_size"` // 缓冲区大小
+
+    // 监控配置
+    EnableStats   bool          `mapstructure:"enable_stats" yaml:"enable_stats"`     // 启用统计
+    StatsInterval time.Duration `mapstructure:"stats_interval" yaml:"stats_interval"` // 统计间隔
+    Verbose       bool          `mapstructure:"verbose" yaml:"verbose"`               // 详细输出
 }
 ```
 
 主要方法：
-- `LoadConfig(path string)`: 加载配置文件
+- `DefaultConfig()`: 返回默认配置
+- `LoadConfig(configFile string)`: 从文件加载配置
 - `Validate()`: 验证配置有效性
-- `GetValue(key string)`: 获取配置值
-
-### Variable（config/variable.go）
-
-变量配置的定义和处理。
-
-```go
-type Variable struct {
-    Type    string   `yaml:"type"`    // 变量类型
-    Values  []string `yaml:"values"`  // 可选值列表
-    Min     int      `yaml:"min"`     // 最小值
-    Max     int      `yaml:"max"`     // 最大值
-    Length  int      `yaml:"length"`  // 字符串长度
-    Pattern string   `yaml:"pattern"` // 正则表达式模式
-}
-```
+- `GetPriority()`: 计算Syslog优先级
 
 ## 实现流程
 
@@ -55,103 +53,94 @@ type Variable struct {
 
 ```go
 // 加载配置文件
-func LoadConfig(path string) (*Config, error) {
-    // 读取配置文件
-    data, err := ioutil.ReadFile(path)
-    if err != nil {
-        return nil, fmt.Errorf("read config file: %v", err)
+func LoadConfig(configFile string) (*Config, error) {
+    cfg := DefaultConfig()
+
+    // 如果指定了配置文件，尝试读取
+    if configFile != "" {
+        viper.SetConfigFile(configFile)
+        if err := viper.ReadInConfig(); err != nil {
+            return nil, fmt.Errorf("读取配置文件失败: %w", err)
+        }
     }
-    
-    // 解析YAML
-    config := &Config{}
-    if err := yaml.Unmarshal(data, config); err != nil {
-        return nil, fmt.Errorf("parse config: %v", err)
+
+    // 将viper配置解析到结构体
+    if err := viper.Unmarshal(cfg); err != nil {
+        return nil, fmt.Errorf("配置解析失败: %w", err)
     }
-    
-    // 设置默认值
-    config.setDefaults()
-    
+
     // 验证配置
-    if err := config.Validate(); err != nil {
-        return nil, fmt.Errorf("validate config: %v", err)
+    if err := cfg.Validate(); err != nil {
+        return nil, fmt.Errorf("配置验证失败: %w", err)
     }
-    
-    return config, nil
+
+    return cfg, nil
 }
 ```
 
 ### 2. 配置验证
 
 ```go
-// 验证配置
+// 验证配置的有效性
 func (c *Config) Validate() error {
-    // 验证协议
-    if !isValidProtocol(c.Protocol) {
-        return errors.New("invalid protocol")
+    if c.Target == "" {
+        return fmt.Errorf("目标服务器地址不能为空")
     }
-    
-    // 验证主机和端口
-    if err := validateAddress(c.Host, c.Port); err != nil {
-        return err
-    }
-    
-    // 验证性能参数
-    if err := c.validatePerformance(); err != nil {
-        return err
-    }
-    
-    // 验证模板配置
-    if err := c.validateTemplate(); err != nil {
-        return err
-    }
-    
-    return nil
-}
 
-// 验证性能参数
-func (c *Config) validatePerformance() error {
+    if c.Protocol != "udp" && c.Protocol != "tcp" {
+        return fmt.Errorf("协议必须是 udp 或 tcp")
+    }
+
+    if c.Format != "rfc3164" && c.Format != "rfc5424" {
+        return fmt.Errorf("格式必须是 rfc3164 或 rfc5424")
+    }
+
+    if c.Facility < 0 || c.Facility > 23 {
+        return fmt.Errorf("Facility必须在0-23范围内")
+    }
+
+    if c.Severity < 0 || c.Severity > 7 {
+        return fmt.Errorf("Severity必须在0-7范围内")
+    }
+
     if c.EPS <= 0 {
-        return errors.New("eps must be positive")
+        return fmt.Errorf("EPS必须大于0")
     }
-    
-    if c.Workers <= 0 {
-        return errors.New("workers must be positive")
+
+    if c.Duration <= 0 {
+        return fmt.Errorf("持续时间必须大于0")
     }
-    
-    if c.BufferSize <= 0 {
-        return errors.New("buffer_size must be positive")
+
+    if c.Concurrency <= 0 {
+        return fmt.Errorf("并发数必须大于0")
     }
-    
+
     return nil
 }
 ```
 
-### 3. 变量配置处理
+### 3. 默认配置
 
 ```go
-// 验证变量配置
-func (v *Variable) Validate() error {
-    switch v.Type {
-    case "random_choice":
-        if len(v.Values) == 0 {
-            return errors.New("random_choice requires non-empty values")
-        }
-    case "random_int":
-        if v.Min >= v.Max {
-            return errors.New("random_int requires min < max")
-        }
-    case "random_string":
-        if v.Length <= 0 {
-            return errors.New("random_string requires positive length")
-        }
-    case "pattern":
-        if _, err := regexp.Compile(v.Pattern); err != nil {
-            return fmt.Errorf("invalid pattern: %v", err)
-        }
-    default:
-        return fmt.Errorf("unknown variable type: %s", v.Type)
+// 返回默认配置
+func DefaultConfig() *Config {
+    return &Config{
+        Target:        "localhost:514",
+        Protocol:      "udp",
+        Format:        "rfc3164",
+        Facility:      16, // local0
+        Severity:      6,  // info
+        EPS:           10,
+        Duration:      60 * time.Second,
+        TemplateDir:   "./data/templates",
+        Concurrency:   1,
+        RetryCount:    3,
+        Timeout:       5 * time.Second,
+        BufferSize:    1000,
+        EnableStats:   true,
+        StatsInterval: 5 * time.Second,
+        Verbose:       false,
     }
-    return nil
 }
 ```
 
@@ -159,133 +148,24 @@ func (v *Variable) Validate() error {
 
 ### 1. 配置缓存
 
-```go
-// 配置缓存
-type ConfigCache struct {
-    config     atomic.Value
-    updateTime time.Time
-    mutex      sync.RWMutex
-}
+- 使用viper缓存配置文件内容
+- 避免频繁读取配置文件
 
-// 获取配置（带缓存）
-func (c *ConfigCache) GetConfig() *Config {
-    if config := c.config.Load(); config != nil {
-        return config.(*Config)
-    }
-    return nil
-}
+### 2. 参数验证
 
-// 更新配置缓存
-func (c *ConfigCache) UpdateConfig(config *Config) {
-    c.mutex.Lock()
-    defer c.mutex.Unlock()
-    
-    c.config.Store(config)
-    c.updateTime = time.Now()
-}
-```
-
-### 2. 变量值缓存
-
-```go
-// 变量值缓存
-type VariableCache struct {
-    values map[string]interface{}
-    mutex  sync.RWMutex
-}
-
-// 获取变量值（带缓存）
-func (c *VariableCache) GetValue(name string) (interface{}, bool) {
-    c.mutex.RLock()
-    defer c.mutex.RUnlock()
-    
-    value, ok := c.values[name]
-    return value, ok
-}
-```
+- 提前验证配置参数有效性
+- 避免运行时错误
 
 ## 错误处理
 
 ### 1. 配置错误
 
-```go
-// 配置错误类型
-type ConfigError struct {
-    Field   string
-    Message string
-}
+- 文件读取错误
+- 格式解析错误
+- 参数验证错误
 
-func (e *ConfigError) Error() string {
-    return fmt.Sprintf("config error: %s: %s", e.Field, e.Message)
-}
+### 2. 运行时错误
 
-// 处理配置错误
-func handleConfigError(err error) error {
-    switch err := err.(type) {
-    case *yaml.TypeError:
-        return &ConfigError{"yaml", err.Error()}
-    case *ConfigError:
-        return err
-    default:
-        return &ConfigError{"unknown", err.Error()}
-    }
-}
-```
-
-### 2. 变量错误
-
-```go
-// 变量错误类型
-type VariableError struct {
-    Name    string
-    Message string
-}
-
-func (e *VariableError) Error() string {
-    return fmt.Sprintf("variable error: %s: %s", e.Name, e.Message)
-}
-
-// 处理变量错误
-func handleVariableError(name string, err error) error {
-    return &VariableError{name, err.Error()}
-}
-```
-
-## 扩展性设计
-
-### 1. 配置接口
-
-```go
-// 配置提供者接口
-type ConfigProvider interface {
-    Load() (*Config, error)
-    Save(*Config) error
-    Watch(chan<- *Config)
-}
-
-// 文件配置提供者
-type FileConfigProvider struct {
-    path string
-}
-
-// 远程配置提供者
-type RemoteConfigProvider struct {
-    endpoint string
-    client   *http.Client
-}
-```
-
-### 2. 变量类型扩展
-
-```go
-// 变量生成器接口
-type VariableGenerator interface {
-    Generate() interface{}
-    Validate() error
-}
-
-// 注册变量类型
-func RegisterVariableType(name string, generator VariableGenerator) {
-    variableGenerators[name] = generator
-}
-```
+- 网络连接错误
+- 资源分配错误
+- 超时错误

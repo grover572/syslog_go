@@ -2,43 +2,28 @@
 
 ## 核心组件
 
-### Sender（sender/sender.go）
+### Sender（pkg/sender/sender.go）
 
 发送器的主要实现，负责消息的生成和发送。
 
 ```go
 type Sender struct {
-    config     *config.Config
-    engine     *template.Engine
-    pool       *ConnectionPool
-    statistics *Statistics
+    config      *config.Config
+    connPool    *ConnectionPool
+    rateLimiter *RateLimiter
+    stats       *Statistics
+    ctx         context.Context
+    cancel      context.CancelFunc
+    wg          sync.WaitGroup
+    templateEngine *template.Engine
 }
 ```
 
 主要方法：
-- `NewSender(config *config.Config)`: 创建新的发送器实例
+- `NewSender(cfg *config.Config)`: 创建新的发送器实例
 - `Start()`: 启动发送器
-- `Stop()`: 停止发送器
-- `SendMessage(message string)`: 发送单条消息
-
-### ConnectionPool（sender/connection.go）
-
-连接池管理，处理TCP/UDP连接的创建、复用和关闭。
-
-```go
-type ConnectionPool struct {
-    protocol    string
-    connections chan net.Conn
-    target      string
-    sourceIP    string
-}
-```
-
-主要方法：
-- `NewConnectionPool(config *config.Config)`: 创建连接池
-- `GetConnection()`: 获取一个可用连接
-- `ReleaseConnection(conn net.Conn)`: 释放连接回池
-- `Close()`: 关闭所有连接
+- `Stop()`: 停止发送器并关闭连接池
+- `GetStats()`: 获取统计信息
 
 ## 实现流程
 
@@ -46,74 +31,56 @@ type ConnectionPool struct {
 
 ```go
 // 创建发送器
-func NewSender(config *config.Config) (*Sender, error) {
-    // 初始化模板引擎
-    engine := template.NewEngine(config.TemplatePath, config.Verbose)
-    
-    // 创建连接池
-    pool := NewConnectionPool(config)
-    
-    // 初始化统计信息
-    stats := NewStatistics()
-    
-    return &Sender{
-        config:     config,
-        engine:     engine,
-        pool:       pool,
-        statistics: stats,
-    }, nil
+func NewSender(cfg *config.Config) (*Sender, error) {
+    ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration)
+
+    s := &Sender{
+        config: cfg,
+        ctx:    ctx,
+        cancel: cancel,
+        stats:  &Statistics{StartTime: time.Now()},
+    }
+
+    // 初始化连接池
+    if err := s.initConnectionPool(); err != nil {
+        return nil, fmt.Errorf("初始化连接池失败: %w", err)
+    }
+
+    // 初始化速率限制器
+    s.rateLimiter = NewRateLimiter(cfg.EPS)
+
+    return s, nil
 }
 ```
 
 ### 2. 消息发送流程
 
 ```go
-// 发送消息
-func (s *Sender) SendMessage(message string) error {
-    // 获取连接
-    conn := s.pool.GetConnection()
-    defer s.pool.ReleaseConnection(conn)
-    
-    // 生成消息内容
-    content := s.engine.GenerateMessage(message)
-    
-    // 格式化Syslog消息
-    syslogMsg := syslog.Format(content, s.config)
-    
-    // 发送消息
-    _, err := conn.Write([]byte(syslogMsg))
-    if err != nil {
-        s.statistics.IncrementFailures()
-        return err
-    }
-    
-    s.statistics.IncrementSuccess()
-    return nil
-}
-```
+// 发送工作协程
+func (s *Sender) sendWorker(workerID int) {
+    defer s.wg.Done()
 
-### 3. 速率控制
-
-```go
-// 速率限制器
-type RateLimiter struct {
-    rate      int
-    bucket    chan struct{}
-    closeOnce sync.Once
-    done      chan struct{}
-}
-
-// 控制发送速率
-func (s *Sender) controlRate() {
-    ticker := time.NewTicker(time.Second / time.Duration(s.config.EPS))
-    defer ticker.Stop()
-    
     for {
         select {
-        case <-ticker.C:
-            s.sendChan <- struct{}{}
-        case <-s.done:
+        case <-s.ctx.Done():
             return
+        default:
+            // 等待直到允许发送
+            s.rateLimiter.Wait()
+
+            // 生成消息
+            message, err := s.generateMessage()
+            if err != nil {
+                atomic.AddInt64(&s.stats.Failed, 1)
+                continue
+            }
+
+            // 发送消息
+            if err = s.sendMessage(message); err != nil {
+                atomic.AddInt64(&s.stats.Failed, 1)
+            } else {
+                atomic.AddInt64(&s.stats.Sent, 1)
+            }
         }
     }
 }
@@ -121,153 +88,71 @@ func (s *Sender) controlRate() {
 
 ## 性能优化
 
-### 1. 连接池优化
+### 1. 并发处理
 
-```go
-// 预创建连接
-func (p *ConnectionPool) initConnections() {
-    for i := 0; i < p.size; i++ {
-        conn, err := p.createConnection()
-        if err != nil {
-            continue
-        }
-        p.connections <- conn
-    }
-}
+- 使用多个goroutine并发发送消息
+- 使用WaitGroup确保所有goroutine正确退出
+- 使用context控制生命周期
 
-// 动态扩缩容
-func (p *ConnectionPool) adjustSize() {
-    currentSize := len(p.connections)
-    if currentSize < p.minSize {
-        p.grow(p.minSize - currentSize)
-    } else if currentSize > p.maxSize {
-        p.shrink(currentSize - p.maxSize)
-    }
-}
-```
+### 2. 速率控制
 
-### 2. 内存优化
+- 使用RateLimiter控制发送速率
+- 支持配置每秒事件数(EPS)
+- 避免发送过快导致目标服务器过载
 
-```go
-// 使用对象池复用消息对象
-var messagePool = sync.Pool{
-    New: func() interface{} {
-        return &Message{}
-    },
-}
+### 3. 连接池管理
 
-// 获取消息对象
-func getMessageFromPool() *Message {
-    return messagePool.Get().(*Message)
-}
-
-// 释放消息对象
-func releaseMessageToPool(msg *Message) {
-    msg.Reset()
-    messagePool.Put(msg)
-}
-```
-
-### 3. 并发优化
-
-```go
-// 工作协程池
-type WorkerPool struct {
-    workers chan struct{}
-    tasks   chan func()
-}
-
-// 并发发送消息
-func (s *Sender) sendConcurrently(messages []string) {
-    var wg sync.WaitGroup
-    for _, msg := range messages {
-        wg.Add(1)
-        s.workerPool.tasks <- func() {
-            defer wg.Done()
-            s.SendMessage(msg)
-        }
-    }
-    wg.Wait()
-}
-```
+- 复用TCP/UDP连接
+- 支持配置并发连接数
+- 自动处理连接的获取和释放
 
 ## 错误处理
 
-### 1. 连接错误处理
+### 1. 连接错误
 
 ```go
-// 连接重试机制
-func (p *ConnectionPool) getConnectionWithRetry() (net.Conn, error) {
-    for i := 0; i < p.retryCount; i++ {
-        conn, err := p.GetConnection()
-        if err == nil {
-            return conn, nil
-        }
-        time.Sleep(p.retryInterval)
+// 发送消息
+func (s *Sender) sendMessage(msg *syslog.Message) error {
+    conn, err := s.connPool.Get()
+    if err != nil {
+        return fmt.Errorf("获取连接失败: %w", err)
     }
-    return nil, errors.New("max retry count exceeded")
+    defer s.connPool.Put(conn)
+
+    // 发送消息
+    data := msg.Bytes()
+    _, err = conn.Write(data)
+    if err != nil {
+        return fmt.Errorf("写入数据失败: %w", err)
+    }
+
+    return nil
 }
 ```
 
-### 2. 发送错误处理
+### 2. 消息生成错误
 
-```go
-// 处理发送错误
-func (s *Sender) handleSendError(err error) {
-    if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-        // 处理超时错误
-        s.statistics.IncrementTimeouts()
-    } else if opErr, ok := err.(*net.OpError); ok {
-        // 处理网络操作错误
-        s.handleNetworkError(opErr)
-    } else {
-        // 处理其他错误
-        s.statistics.IncrementFailures()
-    }
-}
-```
+- 处理模板变量解析错误
+- 处理数据文件读取错误
+- 记录错误统计信息
 
 ## 监控统计
 
-### 1. 性能指标收集
+### 1. 统计信息
 
 ```go
 type Statistics struct {
-    TotalSent    uint64
-    TotalSuccess uint64
-    TotalFailures uint64
-    TotalTimeouts uint64
-    AverageLatency float64
-    mutex         sync.RWMutex
-}
-
-// 更新统计信息
-func (s *Statistics) Update(success bool, latency time.Duration) {
-    s.mutex.Lock()
-    defer s.mutex.Unlock()
-    
-    s.TotalSent++
-    if success {
-        s.TotalSuccess++
-        s.updateLatency(latency)
-    } else {
-        s.TotalFailures++
-    }
+    Sent      int64     // 已发送消息数
+    Failed    int64     // 发送失败数
+    StartTime time.Time // 开始时间
+    EndTime   time.Time // 结束时间
+    mutex     sync.RWMutex
 }
 ```
 
-### 2. 状态报告
+### 2. 性能监控
 
-```go
-// 生成状态报告
-func (s *Sender) GenerateReport() *Report {
-    stats := s.statistics.GetSnapshot()
-    return &Report{
-        Duration:       time.Since(s.startTime),
-        MessagesPerSec: float64(stats.TotalSent) / time.Since(s.startTime).Seconds(),
-        SuccessRate:    float64(stats.TotalSuccess) / float64(stats.TotalSent),
-        AverageLatency: stats.AverageLatency,
-        ActiveConns:    s.pool.ActiveConnections(),
-    }
-}
-```
+- 实时统计发送成功和失败数
+- 计算发送速率
+- 支持定期打印统计信息
+- 在发送完成时输出最终统计
