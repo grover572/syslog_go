@@ -19,6 +19,7 @@ var (
 	mockOutput string
 	mockCount  int
 	mockAppend bool
+	mockTemplate bool
 )
 
 // mockCmd 生成模拟数据
@@ -43,6 +44,64 @@ var mockCmd = &cobra.Command{
    {{RANDOM_IPV6:external}} - 生成外网IPv6地址 (2000::/3)
    {{RANDOM_IPV6:compressed}} - 生成压缩格式的IPv6地址（包含::）`,
 	Run: func(cmd *cobra.Command, args []string) {
+		// 如果指定了生成模板文件
+		if mockTemplate {
+			// 检查模板文件是否已存在
+			if _, err := os.Stat("template.yml"); err == nil {
+				fmt.Println("template.yml 已存在，跳过生成")
+				return
+			}
+
+			// 生成示例模板文件
+			template := `# 自定义变量配置示例
+variables:
+  # 随机选择类型变量示例
+  CUSTOM_STATUS:
+    type: "random_choice"
+    values:
+      - "正常"
+      - "警告"
+      - "错误"
+      - "严重"
+
+  # 随机整数类型变量示例
+  CUSTOM_SCORE:
+    type: "random_int"
+    min: 0
+    max: 100
+
+  # 随机字符串类型变量示例
+  CUSTOM_ID:
+    type: "random_string"
+    length: 8
+
+  # 自定义IP地址池
+  CUSTOM_SERVER_IP:
+    type: "random_choice"
+    values:
+      - "192.168.1.10"
+      - "192.168.1.11"
+      - "192.168.1.12"
+      - "192.168.1.13"
+
+  # 自定义端口列表
+  CUSTOM_PORT:
+    type: "random_choice"
+    values:
+      - "8080"
+      - "8443"
+      - "9000"
+      - "9443"
+`
+			// 写入模板文件
+			if err := os.WriteFile("template.yml", []byte(template), 0644); err != nil {
+				fmt.Fprintf(os.Stderr, "生成模板文件失败: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("已生成模板文件 template.yml")
+			return
+		}
+
 		// 如果没有提供任何参数，显示帮助信息
 		if len(args) == 0 && mockMessage == "" && mockOutput == "" && mockCount == 1 && !mockAppend {
 			cmd.Help()
@@ -219,11 +278,12 @@ func init() {
 	rootCmd.AddCommand(mockCmd)
 	rootCmd.AddCommand(sendCmd)
 
-	// mock命令标志
+	// 添加命令行参数
 	mockCmd.Flags().StringVarP(&mockMessage, "message", "m", "", "指定消息模板 (支持模板变量，使用 {{变量名:参数}} 格式)")
 	mockCmd.Flags().StringVarP(&mockOutput, "output", "o", "", "输出文件路径 (默认输出到标准输出)")
 	mockCmd.Flags().IntVarP(&mockCount, "count", "n", 1, "生成消息的数量")
 	mockCmd.Flags().BoolVarP(&mockAppend, "append", "a", false, "追加到输出文件 (默认覆盖文件)")
+	mockCmd.Flags().BoolVarP(&mockTemplate, "template", "t", false, "生成自定义模板文件 template.yml")
 	mockCmd.Flags().BoolP("verbose", "v", false, "显示详细信息")
 	viper.BindPFlag("verbose", mockCmd.Flags().Lookup("verbose"))
 

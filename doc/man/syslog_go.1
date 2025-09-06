@@ -1,0 +1,105 @@
+.TH SYSLOG_GO 1 "2024-03" "syslog_go" "用户命令"
+
+.SH 名称
+syslog_go \- 高性能Syslog测试工具
+
+.SH 概要
+.B syslog_go
+[\fICOMMAND\fR]
+[\fIOPTIONS\fR]
+
+.SH 描述
+.B syslog_go
+是一个专业的Syslog日志测试工具，支持UDP/TCP协议，兼容RFC3164/5424格式，可配置发送速率，支持模板化消息生成。
+
+.SH 命令
+.TP
+.B send
+发送Syslog消息（默认）
+.TP
+.B server
+启动Syslog测试服务器
+.TP
+.B mock
+生成模拟数据
+
+.SH MOCK命令选项
+.TP
+.BI \-m,\ \-\-message\ " 模板 "
+指定消息模板（支持模板变量，使用 {{变量名:参数}} 格式）
+.TP
+.BI \-o,\ \-\-output\ " 文件 "
+输出文件路径（默认输出到标准输出）
+.TP
+.BI \-c,\ \-\-count\ " 数量 "
+生成消息的数量（默认：1）
+.TP
+.B \-a, \-\-append
+追加到输出文件（默认覆盖文件）
+.TP
+.B \-t, \-\-template
+生成自定义模板文件 template.yml
+.TP
+.B \-v, \-\-verbose
+显示详细信息
+
+.SH 模板变量
+.TP
+.B {{RANDOM_STRING:选项1,选项2,...}}
+从给定选项中随机选择，支持权重
+.TP
+.B {{RANDOM_INT:最小值-最大值}}
+生成指定范围内的随机整数
+.TP
+.B {{ENUM:选项1,选项2,...}}
+从选项列表中随机选择一个
+.TP
+.B {{MAC}}
+生成随机MAC地址
+.TP
+.B {{RANDOM_IP}} 或 {{RANDOM_IPV4}}
+生成随机IPv4地址
+.br
+{{RANDOM_IP:internal}} - 生成内网IPv4地址
+.br
+{{RANDOM_IP:external}} - 生成外网IPv4地址
+.TP
+.B {{RANGE_IP:范围}}
+生成指定范围内的IP地址
+.br
+{{RANGE_IP:192.168.1.1-192.168.1.100}} - 生成指定范围内的IPv4地址
+.br
+{{RANGE_IP:192.168.1.0/24}} - 生成指定CIDR范围内的IPv4地址
+.br
+{{RANGE_IP:2001:db8::/32}} - 生成指定CIDR范围内的IPv6地址
+.TP
+.B {{RANDOM_IPV6}}
+生成标准格式的IPv6地址
+.br
+{{RANDOM_IPV6:internal}} - 生成内网IPv6地址 (fd00::/8)
+.br
+{{RANDOM_IPV6:external}} - 生成外网IPv6地址 (2000::/3)
+.br
+{{RANDOM_IPV6:compressed}} - 生成压缩格式的IPv6地址（包含::）
+
+.SH 示例
+.TP
+生成一条消息并输出到标准输出：
+.B syslog_go mock -m
+"来自 {{RANDOM_IP}} 的消息"
+.TP
+生成10条消息并写入文件：
+.B syslog_go mock -m
+"状态: {{RANDOM_STRING:正常,警告,错误}}" -c 10 -o messages.txt
+.TP
+生成自定义模板文件：
+.B syslog_go mock -t
+
+.SH 作者
+由syslog_go团队开发维护
+
+.SH 版权
+Copyright (C) 2024 syslog_go团队，保留所有权利。
+
+.SH 参见
+syslogd(8), logger(1)
