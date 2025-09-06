@@ -94,20 +94,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: rpm-${{ matrix.platform }}-${{ matrix.arch }}
-          path: ~/rpmbuild/RPMS/**/*.rpmbuild目录结构
-          mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-          
-          # 创建源码包
-          tar czf ~/rpmbuild/SOURCES/syslog_go-${VERSION}.tar.gz .
-          
-          # 更新spec文件版本
-          sed -i "s/Version:.*/Version:        ${VERSION}/" syslog_go.spec
-          
-          # 复制spec文件
-          cp syslog_go.spec ~/rpmbuild/SPECS/
-          
-          # 构建RPM包
-          rpmbuild -ba ~/rpmbuild/SPECS/syslog_go.spec
+          path: ~/rpmbuild/RPMS/**/*.rpm
 
       - name: Create Release
         id: create_release
