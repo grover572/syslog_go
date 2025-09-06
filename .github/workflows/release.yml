@@ -67,7 +67,9 @@ jobs:
         with:
           platforms: arm64
 
-      - name: Install RPM build tools
+      - name: Install RPM build tools (Unix)
+        if: matrix.platform != 'windows'
+        shell: bash
         run: |
           if [ "${{ matrix.platform }}" = "centos" ]; then
             dnf install -y rpm-build
@@ -78,7 +80,15 @@ jobs:
             brew install rpm
           fi
 
-      - name: Set version
+      - name: Install RPM build tools (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          Write-Host "Skipping RPM tools installation on Windows"
+
+      - name: Set version (Unix)
+        if: matrix.platform != 'windows'
+        shell: bash
         id: set_version
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
@@ -86,6 +96,18 @@ jobs:
           else
             echo "VERSION=${{ github.event.inputs.version || '0.0.1' }}" >> $GITHUB_ENV
           fi
+
+      - name: Set version (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        id: set_version
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+            $version = $env:GITHUB_REF -replace '^refs/tags/v'
+            echo "VERSION=$version" >> $env:GITHUB_ENV
+          } else {
+            echo "VERSION=${{ github.event.inputs.version || '0.0.1' }}" >> $env:GITHUB_ENV
+          }
 
       - name: Build package
         shell: bash
