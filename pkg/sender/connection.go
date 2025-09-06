@@ -3,6 +3,7 @@ package sender
 import (
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -43,15 +44,34 @@ func NewConnectionPool(address, protocol string, maxSize int, timeout time.Durat
 }
 
 // createConnection 创建新连接
+// 支持IPv4和IPv6地址格式
 func (p *ConnectionPool) createConnection() (net.Conn, error) {
-	switch p.protocol {
-	case "tcp":
-		return net.DialTimeout("tcp", p.address, p.timeout)
-	case "udp":
-		return net.DialTimeout("udp", p.address, p.timeout)
-	default:
-		return nil, fmt.Errorf("不支持的协议: %s", p.protocol)
+	// 构建网络地址
+	network := p.protocol
+	if network == "tcp" || network == "udp" {
+		// 检查是否为IPv6地址
+		if strings.Contains(p.address, ":") {
+			// 如果地址中包含多个冒号，说明是IPv6地址
+			// 检查地址是否已包含端口号
+			if !strings.HasSuffix(p.address, "]") {
+				// 如果地址不是以]结尾，说明需要添加端口号
+				// 查找最后一个冒号，它应该是端口号分隔符
+				lastColon := strings.LastIndex(p.address, ":")
+				if lastColon != -1 {
+					// 分离地址和端口
+					host := p.address[:lastColon]
+					port := p.address[lastColon+1:]
+					// 重新组合地址，确保IPv6地址被方括号包围
+					if !strings.HasPrefix(host, "[") {
+						host = "[" + host + "]"
+					}
+					p.address = host + ":" + port
+				}
+			}
+		}
+		return net.DialTimeout(network, p.address, p.timeout)
 	}
+	return nil, fmt.Errorf("不支持的协议: %s", p.protocol)
 }
 
 // Get 从连接池获取连接

@@ -125,9 +125,14 @@ var (
 )
 
 // rootCmd 代表发送命令
+// rootCmd 代表应用程序的根命令
+// 它定义了程序的基本信息、全局标志和主要功能
 var rootCmd = &cobra.Command{
+	// Use 定义命令的名称和用法
 	Use:   "syslog_go",
+	// Short 是命令的简短描述
 	Short: "高性能Syslog测试工具",
+	// Long 是命令的详细描述，包含主要功能列表
 	Long: `Syslog Go - 专业的Syslog日志测试工具
 
 可用命令:
@@ -142,8 +147,9 @@ var rootCmd = &cobra.Command{
 ✓ 支持模板化消息生成
 ✓ 内置多种变量函数
 ✓ 实时监控统计`,
+	// Run 定义了命令的执行逻辑
+	// 当没有指定子命令时，显示帮助信息
 	Run: func(cmd *cobra.Command, args []string) {
-		// 显示帮助信息
 		cmd.Help()
 	},
 }
