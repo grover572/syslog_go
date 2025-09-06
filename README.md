@@ -1,6 +1,6 @@
 # Syslog发送工具
 
-[![Release](https://github.com/yourusername/syslog_go/actions/workflows/release.yml/badge.svg)](https://github.com/yourusername/syslog_go/actions/workflows/release.yml)
+[![Release](https://github.com/grover572/syslog_go/actions/workflows/release.yml/badge.svg)](https://github.com/grover572/syslog_go/actions/workflows/release.yml)
 
 一个功能强大的Syslog消息发送工具，支持高性能批量发送、模板化数据生成和交互式配置。
 
@@ -26,23 +26,10 @@
 
 ```bash
 # 克隆项目
-git clone <repository-url>
 cd syslog_go
 
 # 构建（需要Go 1.21+）
 go build
-```
-
-#### RPM包安装
-
-从[GitHub Releases](https://github.com/yourusername/syslog_go/releases)页面下载最新的RPM包：
-
-```bash
-# 安装RPM包
-sudo rpm -ivh syslog_go-*.rpm
-
-# 升级已安装的包
-sudo rpm -Uvh syslog_go-*.rpm
 ```
 
 ### 基本使用
