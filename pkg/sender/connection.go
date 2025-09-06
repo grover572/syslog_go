@@ -141,11 +141,23 @@ func (p *ConnectionPool) Close() {
 	}
 }
 
-// Size 获取连接池当前大小
+// Size 返回连接池当前大小
 func (p *ConnectionPool) Size() int {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
 	return len(p.connections)
+}
+
+// isTemporaryError 检查错误是否为临时性错误
+func isTemporaryError(err error) bool {
+	if err == nil {
+		return true
+	}
+	// 检查错误是否实现了 net.Error 接口
+	if netErr, ok := err.(net.Error); ok {
+		return netErr.Temporary()
+	}
+	return false
 }
 
 // RateLimiter 速率限制器
@@ -172,8 +184,11 @@ func (rl *RateLimiter) Allow() bool {
 	defer rl.mutex.Unlock()
 
 	now := time.Now()
-	if now.Sub(rl.lastTime) >= rl.interval {
-		rl.lastTime = now
+	elapsed := now.Sub(rl.lastTime)
+	if elapsed >= rl.interval {
+		// 如果距离上次发送时间超过了多个间隔，调整lastTime以保持期望速率
+		intervals := elapsed / rl.interval
+		rl.lastTime = rl.lastTime.Add(intervals * rl.interval)
 		return true
 	}
 	return false
@@ -183,15 +198,19 @@ func (rl *RateLimiter) Allow() bool {
 func (rl *RateLimiter) Wait() {
 	rl.mutex.Lock()
 	now := time.Now()
-	next := rl.lastTime.Add(rl.interval)
-	rl.mutex.Unlock()
-
-	if next.After(now) {
-		time.Sleep(next.Sub(now))
+	elapsed := now.Sub(rl.lastTime)
+	if elapsed >= rl.interval {
+		// 如果距离上次发送时间超过了多个间隔，调整lastTime以保持期望速率
+		intervals := elapsed / rl.interval
+		rl.lastTime = rl.lastTime.Add(intervals * rl.interval)
+	} else {
+		// 计算需要等待的时间
+		waitTime := rl.interval - elapsed
+		rl.mutex.Unlock()
+		time.Sleep(waitTime)
+		rl.mutex.Lock()
+		rl.lastTime = rl.lastTime.Add(rl.interval)
 	}
-
-	rl.mutex.Lock()
-	rl.lastTime = time.Now()
 	rl.mutex.Unlock()
 }
 

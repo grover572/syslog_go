@@ -1,6 +1,6 @@
-module syslog_sender
+module syslog_go
 
-go 1.21
+go 1.24.4
 
 require (
 	github.com/spf13/cobra v1.8.0

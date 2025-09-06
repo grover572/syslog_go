@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"syslog_sender/pkg/config"
-	"syslog_sender/pkg/sender"
+	"syslog_go/pkg/config"
+	"syslog_go/pkg/sender"
 )
 
 // InteractiveUI 交互式用户界面

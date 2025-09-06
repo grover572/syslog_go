@@ -10,7 +10,7 @@ import (
 // Config 应用程序配置结构
 type Config struct {
 	// 基础配置
-	Target   string `mapstructure:"target" yaml:"target"`     // 目标服务器地址
+	Target   string `mapstructure:"target" yaml:"target"`       // 目标服务器地址
 	SourceIP string `mapstructure:"source_ip" yaml:"source_ip"` // 源IP地址
 	Protocol string `mapstructure:"protocol" yaml:"protocol"`   // 传输协议
 
@@ -27,38 +27,42 @@ type Config struct {
 	TemplateDir  string `mapstructure:"template_dir" yaml:"template_dir"`   // 模板目录
 	TemplateFile string `mapstructure:"template_file" yaml:"template_file"` // 指定模板文件
 	DataFile     string `mapstructure:"data_file" yaml:"data_file"`         // 数据文件
+	Message      string `mapstructure:"message" yaml:"message"`             // 消息内容
 
 	// 高级配置
-	Concurrency int  `mapstructure:"concurrency" yaml:"concurrency"` // 并发连接数
-	RetryCount  int  `mapstructure:"retry_count" yaml:"retry_count"`   // 重试次数
-	Timeout     time.Duration `mapstructure:"timeout" yaml:"timeout"`     // 连接超时
-	BufferSize  int  `mapstructure:"buffer_size" yaml:"buffer_size"`   // 缓冲区大小
+	Concurrency int           `mapstructure:"concurrency" yaml:"concurrency"` // 并发连接数
+	RetryCount  int           `mapstructure:"retry_count" yaml:"retry_count"` // 重试次数
+	Timeout     time.Duration `mapstructure:"timeout" yaml:"timeout"`         // 连接超时
+	BufferSize  int           `mapstructure:"buffer_size" yaml:"buffer_size"` // 缓冲区大小
 
 	// 监控配置
-	EnableStats   bool `mapstructure:"enable_stats" yaml:"enable_stats"`     // 启用统计
+	EnableStats   bool          `mapstructure:"enable_stats" yaml:"enable_stats"`     // 启用统计
 	StatsInterval time.Duration `mapstructure:"stats_interval" yaml:"stats_interval"` // 统计间隔
+	Verbose       bool          `mapstructure:"verbose" yaml:"verbose"`               // 详细输出
 }
 
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		Target:   "localhost:514",
-		SourceIP: "",
-		Protocol: "udp",
-		Format:   "rfc3164",
-		Facility: 16, // local0
-		Severity: 6,  // info
-		EPS:      10,
-		Duration: 60 * time.Second,
-		TemplateDir:  "./data/templates",
-		TemplateFile: "",
-		DataFile:     "",
-		Concurrency:  1,
-		RetryCount:   3,
-		Timeout:      5 * time.Second,
-		BufferSize:   1000,
-		EnableStats:  true,
+		Target:        "localhost:514",
+		SourceIP:      "",
+		Protocol:      "udp",
+		Format:        "rfc3164",
+		Facility:      16, // local0
+		Severity:      6,  // info
+		EPS:           10,
+		Duration:      60 * time.Second,
+		TemplateDir:   "./data/templates",
+		TemplateFile:  "",
+		DataFile:      "",
+		Message:       "",
+		Concurrency:   1,
+		RetryCount:    3,
+		Timeout:       5 * time.Second,
+		BufferSize:    1000,
+		EnableStats:   true,
 		StatsInterval: 5 * time.Second,
+		Verbose:       false,
 	}
 }
 

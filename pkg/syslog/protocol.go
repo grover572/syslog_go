@@ -2,6 +2,7 @@ package syslog
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -16,30 +17,30 @@ const (
 
 // Message 表示一个Syslog消息
 type Message struct {
-	Priority  int       // 优先级 (Facility * 8 + Severity)
-	Timestamp time.Time // 时间戳
-	Hostname  string    // 主机名
-	Tag       string    // 标签/程序名
-	PID       string    // 进程ID
-	Content   string    // 消息内容
-	Format    SyslogFormat // 格式类型
+	Priority     int          // 优先级 (Facility * 8 + Severity)
+	Timestamp    time.Time    // 时间戳
+	Hostname     string       // 主机名
+	Tag          string       // 标签/程序名
+	PID          string       // 进程ID
+	Content      string       // 消息内容
+	SyslogFormat SyslogFormat // 格式类型
 }
 
 // NewMessage 创建新的Syslog消息
 func NewMessage(priority int, hostname, tag, content string, format SyslogFormat) *Message {
 	return &Message{
-		Priority:  priority,
-		Timestamp: time.Now(),
-		Hostname:  hostname,
-		Tag:       tag,
-		Content:   content,
-		Format:    format,
+		Priority:     priority,
+		Timestamp:    time.Now(),
+		Hostname:     hostname,
+		Tag:          tag,
+		Content:      content,
+		SyslogFormat: format,
 	}
 }
 
 // Format 将消息格式化为指定的Syslog格式
 func (m *Message) Format() string {
-	switch m.Format {
+	switch m.SyslogFormat {
 	case RFC5424:
 		return m.formatRFC5424()
 	default:
@@ -52,7 +53,7 @@ func (m *Message) Format() string {
 func (m *Message) formatRFC3164() string {
 	// RFC3164时间戳格式: Jan 02 15:04:05
 	timestamp := m.Timestamp.Format("Jan 02 15:04:05")
-	
+
 	// 构建标签部分
 	var tagPart string
 	if m.PID != "" {
@@ -60,12 +61,12 @@ func (m *Message) formatRFC3164() string {
 	} else {
 		tagPart = m.Tag
 	}
-	
+
 	// 如果标签为空，使用默认标签
 	if tagPart == "" {
-		tagPart = "syslog_sender"
+		tagPart = "syslog_go"
 	}
-	
+
 	return fmt.Sprintf("<%d>%s %s %s: %s",
 		m.Priority,
 		timestamp,
@@ -79,26 +80,26 @@ func (m *Message) formatRFC3164() string {
 func (m *Message) formatRFC5424() string {
 	// RFC5424时间戳格式: 2006-01-02T15:04:05.000Z
 	timestamp := m.Timestamp.UTC().Format("2006-01-02T15:04:05.000Z")
-	
+
 	// 处理各个字段，空值用 "-" 表示
 	hostname := m.Hostname
 	if hostname == "" {
 		hostname = "-"
 	}
-	
+
 	appName := m.Tag
 	if appName == "" {
-		appName = "syslog_sender"
+		appName = "syslog_go"
 	}
-	
+
 	procID := m.PID
 	if procID == "" {
 		procID = "-"
 	}
-	
-	msgID := "-"           // 消息ID，通常为空
-	structuredData := "-"  // 结构化数据，暂时为空
-	
+
+	msgID := "-"          // 消息ID，通常为空
+	structuredData := "-" // 结构化数据，暂时为空
+
 	return fmt.Sprintf("<%d>1 %s %s %s %s %s %s %s",
 		m.Priority,
 		timestamp,
@@ -108,6 +109,87 @@ func (m *Message) formatRFC5424() string {
 		msgID,
 		structuredData,
 		m.Content)
+}
+
+// ParseRFC3164 解析RFC3164格式的syslog消息
+func ParseRFC3164(msg string) (*Message, error) {
+	// RFC3164格式: <Priority>Timestamp Hostname Tag[PID]: Content
+	pattern := regexp.MustCompile(`^<(\d+)>([A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})\s+([^\s]+)\s+([^:\[]+)(?:\[(\d+)\])?:\s+(.+)$`)
+	matches := pattern.FindStringSubmatch(msg)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid RFC3164 format")
+	}
+
+	// 解析优先级
+	var priority int
+	fmt.Sscanf(matches[1], "%d", &priority)
+
+	// 解析时间戳
+	currentYear := time.Now().Year()
+	timestamp, err := time.Parse("Jan 2 15:04:05 2006", matches[2]+fmt.Sprintf(" %d", currentYear))
+	if err != nil {
+		return nil, fmt.Errorf("invalid timestamp: %v", err)
+	}
+
+	message := &Message{
+		Priority:     priority,
+		Timestamp:    timestamp,
+		Hostname:     matches[3],
+		Tag:          matches[4],
+		PID:          matches[5],
+		Content:      matches[6],
+		SyslogFormat: RFC3164,
+	}
+
+	return message, nil
+}
+
+// ParseRFC5424 解析RFC5424格式的syslog消息
+func ParseRFC5424(msg string) (*Message, error) {
+	// RFC5424格式: <Priority>Version Timestamp Hostname App-Name ProcID MsgID Structured-Data Msg
+	pattern := regexp.MustCompile(`^<(\d+)>1\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$`)
+	matches := pattern.FindStringSubmatch(msg)
+	if matches == nil {
+		return nil, fmt.Errorf("invalid RFC5424 format")
+	}
+
+	// 解析优先级
+	var priority int
+	fmt.Sscanf(matches[1], "%d", &priority)
+
+	// 解析时间戳
+	timestamp, err := time.Parse(time.RFC3339, matches[2])
+	if err != nil {
+		return nil, fmt.Errorf("invalid timestamp: %v", err)
+	}
+
+	// 处理特殊值
+	hostname := matches[3]
+	if hostname == "-" {
+		hostname = ""
+	}
+
+	appName := matches[4]
+	if appName == "-" {
+		appName = ""
+	}
+
+	procID := matches[5]
+	if procID == "-" {
+		procID = ""
+	}
+
+	message := &Message{
+		Priority:     priority,
+		Timestamp:    timestamp,
+		Hostname:     hostname,
+		Tag:          appName,
+		PID:          procID,
+		Content:      matches[8],
+		SyslogFormat: RFC5424,
+	}
+
+	return message, nil
 }
 
 // SetTimestamp 设置自定义时间戳
@@ -164,7 +246,7 @@ func GetFacilityName(facility int) string {
 		22: "local6",
 		23: "local7",
 	}
-	
+
 	if name, ok := facilities[facility]; ok {
 		return name
 	}
@@ -183,7 +265,7 @@ func GetSeverityName(severity int) string {
 		6: "info",
 		7: "debug",
 	}
-	
+
 	if name, ok := severities[severity]; ok {
 		return name
 	}

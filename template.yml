@@ -1,0 +1,39 @@
+# 自定义变量配置示例
+variables:
+  # 随机选择类型变量示例
+  CUSTOM_STATUS:
+    type: "random_choice"
+    values:
+      - "正常"
+      - "警告"
+      - "错误"
+      - "严重"
+
+  # 随机整数类型变量示例
+  CUSTOM_SCORE:
+    type: "random_int"
+    min: 0
+    max: 100
+
+  # 随机字符串类型变量示例
+  CUSTOM_ID:
+    type: "random_string"
+    length: 8
+
+  # 自定义IP地址池
+  CUSTOM_SERVER_IP:
+    type: "random_choice"
+    values:
+      - "192.168.1.10"
+      - "192.168.1.11"
+      - "192.168.1.12"
+      - "192.168.1.13"
+
+  # 自定义端口列表
+  CUSTOM_PORT:
+    type: "random_choice"
+    values:
+      - "8080"
+      - "8443"
+      - "9000"
+      - "9443"
