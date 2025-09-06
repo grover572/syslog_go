@@ -15,43 +15,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Windows x86_64
-          - os: windows-latest
-            arch: amd64
-            platform: windows
-          # Linux x86_64
-          - os: ubuntu-latest
-            arch: amd64
-            platform: linux
-          # Linux ARM64
-          - os: ubuntu-latest
-            arch: arm64
-            platform: linux
-          # macOS x86_64
-          - os: macos-latest
-            arch: amd64
-            platform: darwin
-          # macOS ARM64
-          - os: macos-latest
-            arch: arm64
-            platform: darwin
-          # CentOS x86_64 (using container)
-          - os: ubuntu-latest
-            arch: amd64
-            platform: centos
-            container: quay.io/centos/centos:stream8
-          # CentOS ARM64 (using container)
-          - os: ubuntu-latest
-            arch: arm64
-            platform: centos
-            container: quay.io/centos/centos:stream8
-
-    runs-on: ${{ matrix.os }}
-    container: ${{ matrix.container }}
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -61,33 +25,7 @@ jobs:
         with:
           go-version: '1.20'
 
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Install RPM build tools (Unix)
-        if: matrix.platform != 'windows'
-        shell: bash
-        run: |
-          if [ "${{ matrix.platform }}" = "centos" ]; then
-            dnf install -y rpm-build
-          elif [ "${{ matrix.platform }}" = "linux" ]; then
-            sudo apt-get update
-            sudo apt-get install -y rpm
-          elif [ "${{ matrix.platform }}" = "darwin" ]; then
-            brew install rpm
-          fi
-
-      - name: Install RPM build tools (Windows)
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          Write-Host "Skipping RPM tools installation on Windows"
-
-      - name: Set version (Unix)
-        if: matrix.platform != 'windows'
+      - name: Set version
         shell: bash
         id: set_version
         run: |
@@ -97,50 +35,33 @@ jobs:
             echo "VERSION=${{ github.event.inputs.version || '0.0.1' }}" >> $GITHUB_ENV
           fi
 
-      - name: Set version (Windows)
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        id: set_version
-        run: |
-          if ($env:GITHUB_REF -like 'refs/tags/*') {
-            $version = $env:GITHUB_REF -replace '^refs/tags/v'
-            echo "VERSION=$version" >> $env:GITHUB_ENV
-          } else {
-            echo "VERSION=${{ github.event.inputs.version || '0.0.1' }}" >> $env:GITHUB_ENV
-          }
-
-      - name: Build package
+      - name: Build all platforms
         shell: bash
-        if: matrix.platform != 'windows'
         run: |
-          if [ "${{ matrix.platform }}" = "centos" ]; then
-            GOOS=linux GOARCH=${{ matrix.arch }} make rpm
-          else
-            GOOS=${{ matrix.platform }} GOARCH=${{ matrix.arch }} go build -o syslog_go
-          fi
+          # Build for Windows
+          GOOS=windows GOARCH=amd64 go build -o syslog_go-windows-amd64.exe
+          GOOS=windows GOARCH=arm64 go build -o syslog_go-windows-arm64.exe
 
-      - name: Build package (Windows)
-        if: matrix.platform == 'windows'
-        shell: pwsh
-        run: |
-          $env:GOOS="${{ matrix.platform }}"
-          $env:GOARCH="${{ matrix.arch }}"
-          go build -o syslog_go.exe
+          # Build for Linux
+          GOOS=linux GOARCH=amd64 go build -o syslog_go-linux-amd64
+          GOOS=linux GOARCH=arm64 go build -o syslog_go-linux-arm64
+
+          # Build for macOS
+          GOOS=darwin GOARCH=amd64 go build -o syslog_go-darwin-amd64
+          GOOS=darwin GOARCH=arm64 go build -o syslog_go-darwin-arm64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: syslog_go-${{ matrix.platform }}-${{ matrix.arch }}
-          path: |
-            ${{ matrix.platform == 'centos' && '~/rpmbuild/RPMS/**/*.rpm' || (matrix.platform == 'windows' && 'syslog_go.exe' || 'syslog_go') }}
+          name: syslog_go-binaries
+          path: syslog_go-*
 
       - name: Create Release
         id: create_release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            ${{ matrix.platform == 'centos' && '~/rpmbuild/RPMS/**/*.rpm' || (matrix.platform == 'windows' && 'syslog_go.exe' || 'syslog_go') }}
+          files: syslog_go-*
           draft: false
           prerelease: false
         env:
