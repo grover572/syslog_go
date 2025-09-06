@@ -88,6 +88,8 @@ jobs:
           fi
 
       - name: Build package
+        shell: bash
+        if: matrix.platform != 'windows'
         run: |
           if [ "${{ matrix.platform }}" = "centos" ]; then
             GOOS=linux GOARCH=${{ matrix.arch }} make rpm
@@ -95,12 +97,20 @@ jobs:
             GOOS=${{ matrix.platform }} GOARCH=${{ matrix.arch }} go build -o syslog_go
           fi
 
+      - name: Build package (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $env:GOOS="${{ matrix.platform }}"
+          $env:GOARCH="${{ matrix.arch }}"
+          go build -o syslog_go.exe
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: syslog_go-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            ${{ matrix.platform == 'centos' && '~/rpmbuild/RPMS/**/*.rpm' || 'syslog_go' }}
+            ${{ matrix.platform == 'centos' && '~/rpmbuild/RPMS/**/*.rpm' || (matrix.platform == 'windows' && 'syslog_go.exe' || 'syslog_go') }}
 
       - name: Create Release
         id: create_release
@@ -108,7 +118,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ${{ matrix.platform == 'centos' && '~/rpmbuild/RPMS/**/*.rpm' || 'syslog_go' }}
+            ${{ matrix.platform == 'centos' && '~/rpmbuild/RPMS/**/*.rpm' || (matrix.platform == 'windows' && 'syslog_go.exe' || 'syslog_go') }}
           draft: false
           prerelease: false
         env:
