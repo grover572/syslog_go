@@ -42,12 +42,12 @@ jobs:
           - os: ubuntu-latest
             arch: amd64
             platform: centos
-            container: centos:7
+            container: quay.io/centos/centos:stream8
           # CentOS ARM64 (using container)
           - os: ubuntu-latest
             arch: arm64
             platform: centos
-            container: centos:7
+            container: quay.io/centos/centos:stream8
 
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
@@ -69,7 +69,7 @@ jobs:
       - name: Install RPM build tools
         run: |
           if [ "${{ matrix.platform }}" = "centos" ]; then
-            yum install -y rpm-build
+            dnf install -y rpm-build
           elif [ "${{ matrix.platform }}" = "linux" ]; then
             sudo apt-get update
             sudo apt-get install -y rpm
