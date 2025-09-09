@@ -26,6 +26,7 @@ dist/
 _output/
 *.rpm
 ~/rpmbuild/
+syslog_go
 
 # 日志文件
 *.log
