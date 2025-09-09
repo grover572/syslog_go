@@ -40,7 +40,7 @@ type RawSocketConn struct {
 	ackNum     uint32   // TCP确认号
 }
 
-// NewRawSocketConn 创建新的原始套接字连接 (Linux版本)
+// newRawSocketConn 创建新的原始套接字连接 (Linux版本)
 // 功能：
 //   - 创建并配置原始套接字
 //   - 解析和验证源IP和目标地址
@@ -54,7 +54,7 @@ type RawSocketConn struct {
 // 返回值：
 //   - *RawSocketConn: 原始套接字连接对象
 //   - error: 创建过程中的错误
-func NewRawSocketConn(sourceIP, targetAddr, protocol string, verbose bool) (*RawSocketConn, error) {
+func newRawSocketConn(sourceIP, targetAddr, protocol string, verbose bool) (*RawSocketConn, error) {
 	// 解析源IP地址
 	srcIP := net.ParseIP(sourceIP)
 	if srcIP == nil {
