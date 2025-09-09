@@ -33,7 +33,7 @@ type RawSocketConn struct {
 }
 
 // NewRawSocketConn 创建新的原始套接字连接 (Windows版本)
-func NewRawSocketConn(sourceIP, targetAddr, protocol string, verbose bool) (*RawSocketConn, error) {
+func newRawSocketConn(sourceIP, targetAddr, protocol string, verbose bool) (*RawSocketConn, error) {
 	// 解析源IP地址
 	srcIP := net.ParseIP(sourceIP)
 	if srcIP == nil {

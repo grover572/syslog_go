@@ -88,7 +88,7 @@ func (p *ConnectionPool) createConnection() (net.Conn, error) {
 		if p.sourceIP != "" && !isLocalIP(p.sourceIP) {
 			fmt.Printf("尝试使用原始套接字模拟源IP地址: %s\n", p.sourceIP)
 			// 尝试创建原始套接字连接
-			rawConn, err := NewRawSocketConn(p.sourceIP, p.address, network, true) // 启用详细日志
+			rawConn, err := newRawSocketConn(p.sourceIP, p.address, network, true) // 启用详细日志
 			if err != nil {
 				fmt.Printf("警告: 创建原始套接字失败: %v\n", err)
 				fmt.Printf("回退到标准连接，使用系统默认地址\n")
