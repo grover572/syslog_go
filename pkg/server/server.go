@@ -66,11 +66,13 @@ func (s *Server) Start() error {
 	// 启动TCP监听器
 	// net.Listen: 创建一个TCP监听器，开始监听指定地址
 	tcpAddr := fmt.Sprintf("%s:%d", s.host, s.port)
+	log.Printf("正在启动TCP监听器，地址: %s", tcpAddr)
 	s.tcpListener, err = net.Listen("tcp", tcpAddr)
 	if err != nil {
 		s.udpListener.Close() // 如果TCP监听失败，关闭UDP监听器
 		return fmt.Errorf("启动TCP监听失败: %v", err)
 	}
+	log.Printf("TCP监听器启动成功，等待连接...")
 
 	// 启动UDP处理协程
 	s.wg.Add(1) // 增加等待组计数
@@ -92,19 +94,25 @@ func (s *Server) Start() error {
 func (s *Server) Stop() {
 	// 通过关闭通道来通知所有goroutine停止
 	// close: 关闭通道，所有从该通道接收数据的goroutine都会收到通知
+	log.Println("正在停止Syslog服务器...")
 	close(s.shutdown)
 
 	// 关闭所有监听器
 	if s.udpListener != nil {
+		log.Println("正在关闭UDP监听器...")
 		s.udpListener.Close() // 关闭UDP监听器，停止接收新的UDP数据包
+		log.Println("UDP监听器已关闭")
 	}
 	if s.tcpListener != nil {
+		log.Println("正在关闭TCP监听器...")
 		s.tcpListener.Close() // 关闭TCP监听器，停止接收新的TCP连接
+		log.Println("TCP监听器已关闭")
 	}
 
 	// 等待所有goroutine完成
+	log.Println("等待所有处理协程完成...")
 	s.wg.Wait() // 阻塞直到所有goroutine都调用Done
-	log.Println("Syslog服务器已停止")
+	log.Println("所有处理协程已完成，Syslog服务器已停止")
 }
 
 // handleUDP 处理传入的UDP消息
@@ -173,6 +181,7 @@ func (s *Server) handleTCP() {
 		default:
 			// 接受新的TCP连接
 			// net.Listener接口不支持SetDeadline，我们通过检查错误类型来处理关闭情况
+			log.Printf("等待接受TCP连接...")
 			conn, err := s.tcpListener.Accept()
 			if err != nil {
 				// 检查是否是由于服务器关闭导致的错误
@@ -181,6 +190,7 @@ func (s *Server) handleTCP() {
 				}
 				continue
 			}
+			log.Printf("接受到新的TCP连接: %s", conn.RemoteAddr().String())
 
 			// 为每个新连接启动一个独立的goroutine处理
 			s.wg.Add(1) // 增加等待组计数
@@ -197,17 +207,21 @@ func (s *Server) handleTCP() {
 // 参数：
 //   - conn: 需要处理的TCP连接
 func (s *Server) handleTCPConnection(conn net.Conn) {
+	// RemoteAddr: 获取远程客户端的地址信息
+	// 用于日志记录和调试
+	remoteAddr := conn.RemoteAddr()
+
 	// 确保在函数退出时执行清理操作：
-	defer s.wg.Done()     // 1. 减少等待组计数
-	defer conn.Close()    // 2. 关闭TCP连接
+	defer func() {
+		s.wg.Done()     // 1. 减少等待组计数
+		conn.Close()    // 2. 关闭TCP连接
+		log.Printf("关闭与 %s 的TCP连接", remoteAddr)
+	}()
 
 	// 创建一个缓冲区用于接收TCP数据
 	// TCP没有数据包大小限制，但我们使用与UDP相同的缓冲区大小
 	buffer := make([]byte, 65535)
-
-	// RemoteAddr: 获取远程客户端的地址信息
-	// 用于日志记录和调试
-	remoteAddr := conn.RemoteAddr()
+	log.Printf("开始处理来自 %s 的TCP连接", remoteAddr)
 
 	for {
 		select {
@@ -216,12 +230,14 @@ func (s *Server) handleTCPConnection(conn net.Conn) {
 		default:
 			// 设置读取超时以避免永久阻塞
 			// SetReadDeadline: 设置下一次读取操作的截止时间
-			conn.SetReadDeadline(time.Now().Add(1 * time.Second))
+			log.Printf("设置连接 %s 的读取超时时间为30秒", remoteAddr)
+			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 
 			// Read: 从TCP连接读取数据
 			// 返回值：
 			//   - n: 读取的字节数
 			//   - err: 可能的错误
+			log.Printf("等待从 %s 读取数据...", remoteAddr)
 			n, err := conn.Read(buffer)
 			if err != nil {
 				// 忽略超时错误，但对于其他错误（如连接关闭），终止该连接的处理
@@ -229,37 +245,43 @@ func (s *Server) handleTCPConnection(conn net.Conn) {
 					log.Printf("读取TCP连接数据失败: %v", err)
 					return
 				}
+				log.Printf("读取超时，继续等待...")
 				continue
 			}
+			log.Printf("成功从 %s 读取 %d 字节数据", remoteAddr, n)
 
 			// 将接收到的字节转换为字符串并记录
 			msg := string(buffer[:n])
-			log.Printf("[TCP] 来自 %s 的消息: %s", remoteAddr, msg)
+			log.Printf("收到来自 %s 的TCP消息: %s", remoteAddr, msg)
+			log.Printf("消息长度: %d字节，源地址: %s", n, remoteAddr)
 
 			// 尝试解析Syslog消息
-			// 1. 首先尝试RFC5424格式（更新的格式）
-			// 2. 如果失败，尝试RFC3164格式（传统格式）
-			// 3. 如果两种格式都解析失败，记录错误
-			if message, err := syslog.ParseRFC5424(msg); err == nil {
-				// 成功解析为RFC5424格式
-				log.Printf("[RFC5424] 优先级: %d, 时间: %s, 主机: %s, 应用: %s, 内容: %s",
-					message.Priority, // 优先级（Facility * 8 + Severity）
-					message.Timestamp.Format(time.RFC3339), // 标准化的时间格式
-					message.Hostname, // 发送消息的主机名
-					message.Tag,     // 应用程序名称
-					message.Content) // 消息内容
-			} else if message, err := syslog.ParseRFC3164(msg); err == nil {
-				// 成功解析为RFC3164格式
-				log.Printf("[RFC3164] 优先级: %d, 时间: %s, 主机: %s, 标签: %s, 内容: %s",
-					message.Priority, // 优先级
-					message.Timestamp.Format(time.RFC3339), // 转换为标准时间格式
-					message.Hostname, // 主机名
-					message.Tag,     // 进程/应用标签
-					message.Content) // 消息内容
-			} else {
-				// 两种格式都解析失败
-				log.Printf("解析Syslog消息失败: %v", err)
-			}
+log.Printf("开始解析来自 %s 的Syslog消息", remoteAddr)
+// 1. 首先尝试RFC5424格式（更新的格式）
+// 2. 如果失败，尝试RFC3164格式（传统格式）
+// 3. 如果两种格式都解析失败，记录错误
+if message, err := syslog.ParseRFC5424(msg); err == nil {
+	// 成功解析为RFC5424格式
+	log.Printf("[RFC5424] 来自 %s 的消息 - 优先级: %d, 时间: %s, 主机: %s, 应用: %s, 内容: %s",
+		remoteAddr,
+		message.Priority, // 优先级（Facility * 8 + Severity）
+		message.Timestamp.Format(time.RFC3339), // 标准化的时间格式
+		message.Hostname, // 发送消息的主机名
+		message.Tag,     // 应用程序名称
+		message.Content) // 消息内容
+} else if message, err := syslog.ParseRFC3164(msg); err == nil {
+	// 成功解析为RFC3164格式
+	log.Printf("[RFC3164] 来自 %s 的消息 - 优先级: %d, 时间: %s, 主机: %s, 标签: %s, 内容: %s",
+		remoteAddr,
+		message.Priority, // 优先级
+		message.Timestamp.Format(time.RFC3339), // 转换为标准时间格式
+		message.Hostname, // 主机名
+		message.Tag,     // 进程/应用标签
+		message.Content) // 消息内容
+} else {
+	// 两种格式都解析失败
+	log.Printf("解析来自 %s 的Syslog消息失败: %v", remoteAddr, err)
+}
 		}
 	}
 }

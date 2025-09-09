@@ -8,25 +8,39 @@ import (
 	"time"
 )
 
-// ConnectionPool 连接池
+// ConnectionPool 连接池结构体
+// 用于管理和复用与目标服务器的网络连接
+// 主要功能：
+// 1. 连接管理：预创建和复用连接，减少连接建立开销
+// 2. 并发控制：支持多协程安全地获取和归还连接
+// 3. 故障处理：自动检测和重建失效连接
+// 4. 资源控制：限制最大连接数，防止资源耗尽
+// 5. 源地址模拟：支持指定源IP地址（需要root权限）
 type ConnectionPool struct {
-	address     string
-	protocol    string
-	maxSize     int
-	timeout     time.Duration
-	connections chan net.Conn
-	mutex       sync.RWMutex
-	closed      bool
+	// 基础配置
+	address     string         // 目标服务器地址，格式：host:port
+	protocol    string         // 网络协议，支持tcp和udp
+	maxSize     int           // 连接池最大容量
+	timeout     time.Duration // 连接超时时间
+	
+	// 连接管理
+	connections chan net.Conn // 连接通道，用于存储和分发连接
+	mutex       sync.RWMutex  // 读写锁，保护并发访问
+	closed      bool         // 连接池状态标志
+	
+	// 高级功能
+	sourceIP    string       // 源IP地址，用于IP伪装，为空则使用系统默认地址
 }
 
 // NewConnectionPool 创建新的连接池
-func NewConnectionPool(address, protocol string, maxSize int, timeout time.Duration) (*ConnectionPool, error) {
+func NewConnectionPool(address, protocol string, maxSize int, timeout time.Duration, sourceIP string) (*ConnectionPool, error) {
 	pool := &ConnectionPool{
 		address:     address,
 		protocol:    protocol,
 		maxSize:     maxSize,
 		timeout:     timeout,
 		connections: make(chan net.Conn, maxSize),
+		sourceIP:    sourceIP,
 	}
 
 	// 预创建连接
@@ -44,7 +58,7 @@ func NewConnectionPool(address, protocol string, maxSize int, timeout time.Durat
 }
 
 // createConnection 创建新连接
-// 支持IPv4和IPv6地址格式
+// 支持IPv4和IPv6地址格式，支持原始套接字模拟源IP地址
 func (p *ConnectionPool) createConnection() (net.Conn, error) {
 	// 构建网络地址
 	network := p.protocol
@@ -69,7 +83,40 @@ func (p *ConnectionPool) createConnection() (net.Conn, error) {
 				}
 			}
 		}
-		return net.DialTimeout(network, p.address, p.timeout)
+		
+		// 如果指定了源IP地址且不是本机IP，尝试使用原始套接字
+		if p.sourceIP != "" && !isLocalIP(p.sourceIP) {
+			fmt.Printf("尝试使用原始套接字模拟源IP地址: %s\n", p.sourceIP)
+			// 尝试创建原始套接字连接
+			rawConn, err := NewRawSocketConn(p.sourceIP, p.address, network, true) // 启用详细日志
+			if err != nil {
+				fmt.Printf("警告: 创建原始套接字失败: %v\n", err)
+				fmt.Printf("回退到标准连接，使用系统默认地址\n")
+				// 回退到标准连接，不设置源IP
+				return (&net.Dialer{Timeout: p.timeout}).Dial(network, p.address)
+			}
+			return rawConn, nil
+		}
+		
+		// 使用Dialer以支持设置源IP地址
+		dialer := &net.Dialer{
+			Timeout: p.timeout,
+		}
+		
+		// 如果指定了源IP地址且为本机IP，设置本地地址
+		if p.sourceIP != "" && isLocalIP(p.sourceIP) {
+			var localAddr net.Addr
+			if network == "tcp" {
+				localAddr, _ = net.ResolveTCPAddr(network, p.sourceIP+":0")
+			} else if network == "udp" {
+				localAddr, _ = net.ResolveUDPAddr(network, p.sourceIP+":0")
+			}
+			if localAddr != nil {
+				dialer.LocalAddr = localAddr
+			}
+		}
+		
+		return dialer.Dial(network, p.address)
 	}
 	return nil, fmt.Errorf("不支持的协议: %s", p.protocol)
 }
@@ -177,6 +224,58 @@ func isTemporaryError(err error) bool {
 	if netErr, ok := err.(net.Error); ok {
 		return netErr.Temporary()
 	}
+	return false
+}
+
+// isLocalIP 检查IP地址是否为本机IP
+func isLocalIP(ip string) bool {
+	// 获取所有网络接口
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return false
+	}
+
+	// 遍历所有网络接口
+	for _, iface := range interfaces {
+		// 获取接口的地址
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		// 遍历接口的所有地址
+		for _, addr := range addrs {
+			var ipNet *net.IPNet
+			var ok bool
+
+			// 检查地址类型
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ipNet = v
+				ok = true
+			case *net.IPAddr:
+				ipNet = &net.IPNet{
+					IP:   v.IP,
+					Mask: net.CIDRMask(32, 32),
+				}
+				ok = true
+			}
+
+			// 如果是有效的IP地址
+			if ok {
+				// 将IP地址转换为字符串并比较
+				if ipNet.IP.String() == ip {
+					return true
+				}
+			}
+		}
+	}
+
+	// 特殊处理本地回环地址
+	if ip == "127.0.0.1" || ip == "::1" {
+		return true
+	}
+
 	return false
 }
 

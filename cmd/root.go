@@ -15,10 +15,10 @@ import (
 )
 
 var (
-	mockMessage string
-	mockOutput string
-	mockCount  int
-	mockAppend bool
+	mockMessage  string
+	mockOutput   string
+	mockCount    int
+	mockAppend   bool
 	mockTemplate bool
 )
 
@@ -156,7 +156,7 @@ variables:
 					os.Exit(1)
 				}
 				defer f.Close()
-				
+
 				_, err = f.WriteString(output)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "写入输出文件失败: %v\n", err)
@@ -188,7 +188,7 @@ var (
 // 它定义了程序的基本信息、全局标志和主要功能
 var rootCmd = &cobra.Command{
 	// Use 定义命令的名称和用法
-	Use:   "syslog_go",
+	Use: "syslog_go",
 	// Short 是命令的简短描述
 	Short: "高性能Syslog测试工具",
 	// Long 是命令的详细描述，包含主要功能列表
@@ -296,8 +296,8 @@ func init() {
 	sendCmd.Flags().DurationP("duration", "d", 60*time.Second, "发送持续时间")
 	sendCmd.Flags().StringP("format", "f", "rfc3164", "日志格式 (rfc3164/rfc5424)")
 	sendCmd.Flags().StringP("data-file", "D", "", "数据文件")
-	sendCmd.Flags().IntP("facility", "L", 16, "Syslog Facility (0-23)")
-	sendCmd.Flags().IntP("severity", "S", 6, "Syslog Severity (0-7)")
+	// sendCmd.Flags().IntP("facility", "L", 16, "Syslog Facility (0-23)")
+	// sendCmd.Flags().IntP("severity", "S", 6, "Syslog Severity (0-7)")
 	sendCmd.Flags().BoolP("verbose", "v", false, "显示详细信息")
 
 	// 绑定标志到viper
@@ -308,8 +308,8 @@ func init() {
 	viper.BindPFlag("duration", sendCmd.Flags().Lookup("duration"))
 	viper.BindPFlag("format", sendCmd.Flags().Lookup("format"))
 	viper.BindPFlag("data_file", sendCmd.Flags().Lookup("data-file"))
-	viper.BindPFlag("facility", sendCmd.Flags().Lookup("facility"))
-	viper.BindPFlag("severity", sendCmd.Flags().Lookup("severity"))
+	// viper.BindPFlag("facility", sendCmd.Flags().Lookup("facility"))
+	// viper.BindPFlag("severity", sendCmd.Flags().Lookup("severity"))
 	viper.BindPFlag("verbose", sendCmd.Flags().Lookup("verbose"))
 	viper.BindPFlag("message", sendCmd.Flags().Lookup("message"))
 }

@@ -16,26 +16,53 @@ import (
 
 // Sender Syslog发送器
 // 负责管理消息的生成、发送和统计信息收集
+// 主要功能：
+// 1. 消息生成：支持从命令行参数、模板文件或数据文件生成消息
+// 2. 连接管理：使用连接池管理与目标服务器的连接
+// 3. 速率控制：通过速率限制器控制消息发送速率
+// 4. 统计监控：收集和展示发送统计信息
+// 5. 资源管理：确保资源的正确分配和释放
 type Sender struct {
-	config      *config.Config      // 配置信息
-	connPool    *ConnectionPool     // 连接池，管理与目标服务器的连接
-	rateLimiter *RateLimiter       // 速率限制器，控制消息发送速率
-	stats       *Statistics        // 统计信息，记录发送状态和性能指标
-	ctx         context.Context     // 上下文，用于控制发送器的生命周期
-	cancel      context.CancelFunc  // 取消函数，用于停止发送器
-	wg          sync.WaitGroup      // 等待组，用于优雅关闭
-	templateEngine *template.Engine // 模板引擎，用于生成消息内容
-	dataFile    *os.File           // 数据文件句柄
-	dataScanner *bufio.Scanner     // 数据文件扫描器
+	// 基础配置
+	config      *config.Config      // 配置信息，包含目标地址、协议、并发数等
+	
+	// 连接管理
+	connPool    *ConnectionPool     // 连接池，管理与目标服务器的连接，支持连接复用
+	
+	// 性能控制
+	rateLimiter *RateLimiter       // 速率限制器，控制消息发送速率，防止目标服务器过载
+	
+	// 状态监控
+	stats       *Statistics        // 统计信息，记录发送成功/失败数量、运行时间等指标
+	
+	// 生命周期管理
+	ctx         context.Context     // 上下文，用于控制发送器的生命周期和优雅停止
+	cancel      context.CancelFunc  // 取消函数，用于触发停止信号
+	wg          sync.WaitGroup      // 等待组，确保所有协程完成后再退出
+	
+	// 消息生成
+	templateEngine *template.Engine // 模板引擎，处理消息模板和变量替换
+	dataFile    *os.File           // 数据文件句柄，用于从文件读取消息内容
+	dataScanner *bufio.Scanner     // 数据文件扫描器，支持按行读取数据
 }
 
-// Statistics 统计信息
-// 记录发送器的运行状态和性能指标
+// Statistics 统计信息结构体
+// 用于记录和管理发送器的运行状态和性能指标
+// 特点：
+// 1. 线程安全：使用读写锁保护并发访问
+// 2. JSON序列化：支持数据导出和展示
+// 3. 实时统计：记录发送成功/失败数量
+// 4. 性能分析：包含时间戳便于计算吞吐率
 type Statistics struct {
-	Sent      int64     `json:"sent"`      // 已成功发送的消息数量
-	Failed    int64     `json:"failed"`    // 发送失败的消息数量
-	StartTime time.Time `json:"start_time"` // 统计开始时间
-	EndTime   time.Time `json:"end_time"`   // 统计结束时间
+	// 计数器
+	Sent      int64     `json:"sent"`      // 已成功发送的消息数量，原子操作更新
+	Failed    int64     `json:"failed"`    // 发送失败的消息数量，原子操作更新
+	
+	// 时间戳
+	StartTime time.Time `json:"start_time"` // 统计开始时间，用于计算运行时长
+	EndTime   time.Time `json:"end_time"`   // 统计结束时间，用于计算总体性能指标
+	
+	// 并发控制
 	mutex     sync.RWMutex                  // 读写锁，保护统计数据的并发访问
 }
 
@@ -74,6 +101,7 @@ func (s *Sender) initConnectionPool() error {
 		s.config.Protocol,
 		s.config.Concurrency,
 		s.config.Timeout,
+		s.config.SourceIP,
 	)
 	return err
 }

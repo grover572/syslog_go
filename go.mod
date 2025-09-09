@@ -3,6 +3,9 @@ module syslog_go
 go 1.24.4
 
 require (
+	github.com/google/gopacket v1.1.19
+)
+require (
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	gopkg.in/yaml.v3 v3.0.1

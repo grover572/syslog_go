@@ -72,8 +72,8 @@ func init() {
 	rootCmd.AddCommand(serverCmd)
 
 	// 添加命令行参数
-	// -H, --host: 指定服务器监听的主机地址，默认为0.0.0.0
-	serverCmd.Flags().StringVarP(&serverHost, "host", "H", "0.0.0.0", "监听地址")
+	// -H, --host: 指定服务器监听的主机地址，默认为127.0.0.1
+	serverCmd.Flags().StringVarP(&serverHost, "host", "H", "127.0.0.1", "监听地址")
 	// -p, --port: 指定服务器监听的端口，默认为514
 	serverCmd.Flags().IntVarP(&serverPort, "port", "p", 514, "监听端口")
 }
