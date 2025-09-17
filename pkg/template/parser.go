@@ -38,6 +38,7 @@ type VariableParser struct {
 // NewVariableParser 创建并初始化一个新的变量解析器实例
 // 参数:
 //   - verbose: 是否启用详细日志输出，true表示输出详细日志，false表示只输出关键日志
+//
 // 返回值:
 //   - *VariableParser: 初始化后的变量解析器实例
 func NewVariableParser(verbose bool) *VariableParser {
@@ -55,8 +56,10 @@ func NewVariableParser(verbose bool) *VariableParser {
 // 参数:
 //   - name: 变量名，将被自动转换为大写
 //   - variable: 变量配置，包含类型、值范围等信息
+//
 // 返回值:
 //   - error: 如果变量配置无效则返回错误，否则返回nil
+//
 // 支持的变量类型:
 //   - random_choice: 从给定的值列表中随机选择一个
 //   - random_int: 生成指定范围内的随机整数
@@ -127,8 +130,10 @@ func (p *VariableParser) newRandom() *rand.Rand {
 //   - RANDOM_INT:1,100 - 生成1到100之间的随机整数
 //   - ENUM:apple,banana,orange - 从给定列表中随机选择一个值
 //   - CUSTOM_VAR - 使用自定义变量配置生成值
+//
 // 参数:
 //   - expr: 变量表达式，格式为"变量名:参数"，参数部分可选
+//
 // 返回值:
 //   - string: 生成的变量值
 //   - error: 解析或生成过程中的错误，如果成功则为nil
@@ -210,6 +215,7 @@ func (p *VariableParser) Parse(expr string) (string, error) {
 // generateCustomVariable 根据自定义变量配置生成变量值
 // 参数:
 //   - name: 自定义变量名，必须已通过RegisterCustomVariable注册
+//
 // 返回值:
 //   - string: 生成的变量值
 //   - error: 生成过程中的错误，包括变量未找到或类型不支持
@@ -242,8 +248,10 @@ func (p *VariableParser) generateCustomVariable(name string) (string, error) {
 // 示例:
 //   - "10" - 生成长度为10的随机字符串
 //   - "5:2,10:1" - 生成长度为5或10的随机字符串，5的权重为2，10的权重为1
+//
 // 参数:
 //   - params: 字符串长度选项及其权重，多个选项用逗号分隔
+//
 // 返回值:
 //   - string: 生成的随机字符串
 //   - error: 生成过程中的错误，如参数格式错误
@@ -267,7 +275,7 @@ func (p *VariableParser) generateRandomString(params string) (string, error) {
 		// 分离选项和权重值
 		parts := strings.Split(strings.TrimSpace(opt), ":")
 		options[i] = parts[0] // 选项（字符串长度）
-		weight := 1 // 默认权重为1
+		weight := 1           // 默认权重为1
 
 		// 如果指定了权重，解析权重值
 		if len(parts) > 1 {
@@ -299,8 +307,10 @@ func (p *VariableParser) generateRandomString(params string) (string, error) {
 // 示例:
 //   - "1-100" - 生成1到100之间的随机整数
 //   - "0-1000" - 生成0到1000之间的随机整数
+//
 // 参数:
 //   - params: 整数范围，格式为"min-max"
+//
 // 返回值:
 //   - string: 生成的随机整数字符串
 //   - error: 生成过程中的错误，如参数格式错误或范围无效
@@ -348,8 +358,10 @@ func (p *VariableParser) generateRandomInt(params string) (string, error) {
 // 示例:
 //   - "apple,banana,orange" - 随机选择一个水果名
 //   - "error,warn,info,debug" - 随机选择一个日志级别
+//
 // 参数:
 //   - params: 以逗号分隔的选项列表
+//
 // 返回值:
 //   - string: 随机选择的选项
 //   - error: 生成过程中的错误，如参数为空
@@ -398,11 +410,14 @@ func (p *VariableParser) generateMAC() (string, error) {
 // 参数格式:
 //   - 空字符串: 生成完全随机的IP地址
 //   - "start,end": 生成指定范围内的IP地址，目前仅支持最后一段可变
+//
 // 示例:
 //   - "" - 生成任意IP地址，如"192.168.1.1"
 //   - "192.168.1.1,192.168.1.100" - 生成192.168.1.1到192.168.1.100之间的IP
+//
 // 参数:
 //   - params: IP地址范围，为空时生成任意IP，否则需要提供起始和结束IP
+//
 // 返回值:
 //   - string: 生成的IP地址
 //   - error: 生成过程中的错误，如参数格式错误
@@ -475,6 +490,7 @@ func (p *VariableParser) generateRandomIP(params string) (string, error) {
 //   - 192.168.0.0/16 (192.168.0.0 - 192.168.255.255)
 //   - 172.16.0.0/12 (172.16.0.0 - 172.31.255.255)
 //   - 10.0.0.0/8 (10.0.0.0 - 10.255.255.255)
+//
 // 返回值:
 //   - string: 生成的内网IP地址
 //   - error: 生成过程中的错误，一般不会发生错误
@@ -486,32 +502,33 @@ func (p *VariableParser) generateInternalIP() (string, error) {
 	switch random.Intn(3) {
 	case 0: // 192.168.0.0/16 私有网络地址段
 		return fmt.Sprintf("192.168.%d.%d",
-			random.Intn(256),    // 第三段: 0-255
-			random.Intn(254)+1), // 第四段: 1-254，避免使用0和255
+				random.Intn(256),    // 第三段: 0-255
+				random.Intn(254)+1), // 第四段: 1-254，避免使用0和255
 			nil
 	case 1: // 172.16.0.0/12 私有网络地址段
 		return fmt.Sprintf("172.%d.%d.%d",
-			16+random.Intn(16), // 第二段: 16-31，确保在172.16-172.31范围内
-			random.Intn(256),    // 第三段: 0-255
-			random.Intn(254)+1), // 第四段: 1-254，避免使用0和255
+				16+random.Intn(16),  // 第二段: 16-31，确保在172.16-172.31范围内
+				random.Intn(256),    // 第三段: 0-255
+				random.Intn(254)+1), // 第四段: 1-254，避免使用0和255
 			nil
 	default: // 10.0.0.0/8 私有网络地址段
 		return fmt.Sprintf("10.%d.%d.%d",
-			random.Intn(256),    // 第二段: 0-255
-			random.Intn(256),    // 第三段: 0-255
-			random.Intn(254)+1), // 第四段: 1-254，避免使用0和255
+				random.Intn(256),    // 第二段: 0-255
+				random.Intn(256),    // 第三段: 0-255
+				random.Intn(254)+1), // 第四段: 1-254，避免使用0和255
 			nil
 	}
 }
 
 // generateExternalIP 生成随机的外网IP地址
 // 生成规则：
-//   1. 第一段: 1-223，排除0(保留)和127(回环地址)
-//   2. 排除私有网络地址段：
-//      - 10.0.0.0/8
-//      - 172.16.0.0/12
-//      - 192.168.0.0/16
-//   3. 最后一段: 1-254，排除0和255
+//  1. 第一段: 1-223，排除0(保留)和127(回环地址)
+//  2. 排除私有网络地址段：
+//     - 10.0.0.0/8
+//     - 172.16.0.0/12
+//     - 192.168.0.0/16
+//  3. 最后一段: 1-254，排除0和255
+//
 // 返回值:
 //   - string: 生成的外网IP地址
 //   - error: 生成过程中的错误，一般不会发生错误
@@ -529,8 +546,8 @@ func (p *VariableParser) generateExternalIP() (string, error) {
 		}
 
 		// 生成剩余段
-		b := random.Intn(256)    // 第二段: 0-255
-		c := random.Intn(256)    // 第三段: 0-255
+		b := random.Intn(256)     // 第二段: 0-255
+		c := random.Intn(256)     // 第三段: 0-255
 		d := random.Intn(254) + 1 // 第四段: 1-254，避免使用0和255
 
 		// 排除所有私有网络地址段
@@ -547,10 +564,12 @@ func (p *VariableParser) generateExternalIP() (string, error) {
 
 // generateRangeIP 生成指定范围内的IPv4地址
 // 支持两种格式：
-//   1. 起始IP-结束IP，如：192.168.1.1-192.168.1.100
-//   2. CIDR格式，如：192.168.1.0/24
+//  1. 起始IP-结束IP，如：192.168.1.1-192.168.1.100
+//  2. CIDR格式，如：192.168.1.0/24
+//
 // 参数:
 //   - params: IP地址范围，支持IP范围格式或CIDR格式
+//
 // 返回值:
 //   - string: 生成的IP地址
 //   - error: 生成过程中的错误，如参数格式错误或范围无效
@@ -620,10 +639,10 @@ func (p *VariableParser) generateRangeIP(params string) (string, error) {
 
 	// 将32位整数转换回点分十进制格式
 	return fmt.Sprintf("%d.%d.%d.%d",
-		(num>>24)&255,  // 提取第一段
-		(num>>16)&255, // 提取第二段
-		(num>>8)&255,  // 提取第三段
-		num&255),      // 提取第四段
+			(num>>24)&255, // 提取第一段
+			(num>>16)&255, // 提取第二段
+			(num>>8)&255,  // 提取第三段
+			num&255),      // 提取第四段
 		nil
 }
 
@@ -633,8 +652,10 @@ func (p *VariableParser) generateRangeIP(params string) (string, error) {
 //   - 192.168.1.0/24 表示192.168.1.0-192.168.1.255范围
 //   - 10.0.0.0/8 表示10.0.0.0-10.255.255.255范围
 //   - 172.16.0.0/12 表示172.16.0.0-172.31.255.255范围
+//
 // 参数:
 //   - cidr: CIDR格式的网络地址范围
+//
 // 返回值:
 //   - string: 生成的IP地址
 //   - error: 生成过程中的错误，如CIDR格式错误
@@ -700,8 +721,10 @@ func (p *VariableParser) generateIPFromCIDR(cidr string) (string, error) {
 // 示例：
 //   - 2001:db8::/32 表示2001:db8::到2001:db8:ffff:ffff:ffff:ffff:ffff:ffff范围
 //   - fe80::/64 表示fe80::到fe80::ffff:ffff:ffff:ffff范围
+//
 // 参数:
 //   - params: CIDR格式的IPv6网络地址范围
+//
 // 返回值:
 //   - string: 生成的IPv6地址
 //   - error: 生成过程中的错误，如CIDR格式错误或掩码无效
@@ -774,7 +797,7 @@ func (p *VariableParser) generateRangeIPv6(params string) (string, error) {
 		for i := networkParts; i < 8; i++ {
 			// 每组16位，使用计数器的不同部分
 			// 通过位移和掩码提取计数器值的不同部分
-			shift := uint((7-i) * 16)
+			shift := uint((7 - i) * 16)
 			value := (counter >> shift) & 0xFFFF
 			// 格式化为4位十六进制数
 			result[i] = fmt.Sprintf("%04x", value)
@@ -789,11 +812,13 @@ func (p *VariableParser) generateRangeIPv6(params string) (string, error) {
 
 // generateEmail 生成随机的邮箱地址
 // 生成规则：
-//   1. 用户名：6-12个字符，仅包含小写字母和数字
-//   2. 域名：从预定义的常见邮箱服务商中随机选择
+//  1. 用户名：6-12个字符，仅包含小写字母和数字
+//  2. 域名：从预定义的常见邮箱服务商中随机选择
+//
 // 示例：
 //   - user123@gmail.com
 //   - test456@outlook.com
+//
 // 返回值:
 //   - string: 生成的邮箱地址
 //   - error: 生成过程中的错误，一般不会发生错误
@@ -803,13 +828,13 @@ func (p *VariableParser) generateEmail() (string, error) {
 
 	// 预定义常见邮箱服务商域名
 	domains := []string{
-		"gmail.com",    // Google邮箱
-		"yahoo.com",    // Yahoo邮箱
-		"hotmail.com",  // 微软Hotmail
-		"outlook.com",  // 微软Outlook
+		"juminfo.com",    // 企业邮箱示例
+		"gmail.com",      // Google邮箱
+		"yahoo.com",      // Yahoo邮箱
+		"hotmail.com",    // 微软Hotmail
+		"outlook.com",    // 微软Outlook
 		"protonmail.com", // ProtonMail加密邮箱
-		"icloud.com",   // 苹果iCloud邮箱
-		"juminfo.com",  // 企业邮箱示例
+		"icloud.com",     // 苹果iCloud邮箱
 	}
 
 	// 用户名允许的字符集
@@ -833,15 +858,17 @@ func (p *VariableParser) generateEmail() (string, error) {
 
 // generateDomain 生成随机的域名
 // 生成规则：
-//   1. 域名前缀：从预定义的常见前缀中随机选择
-//   2. 域名中间部分：从预定义的功能描述词中随机选择
-//   3. 公司名称：从预定义的知名公司列表中随机选择
-//   4. 顶级域名：从预定义的顶级域名列表中随机选择
+//  1. 域名前缀：从预定义的常见前缀中随机选择
+//  2. 域名中间部分：从预定义的功能描述词中随机选择
+//  3. 公司名称：从预定义的知名公司列表中随机选择
+//  4. 顶级域名：从预定义的顶级域名列表中随机选择
+//
 // 支持四种生成方式：
-//   1. 公司域名: company.tld (如 google.com)
-//   2. 服务域名: prefix.company.tld (如 api.amazon.com)
-//   3. 功能域名: prefix-middle.tld (如 cloud-storage.io)
-//   4. 随机字符域名: random.tld (如 abc123.com)
+//  1. 公司域名: company.tld (如 google.com)
+//  2. 服务域名: prefix.company.tld (如 api.amazon.com)
+//  3. 功能域名: prefix-middle.tld (如 cloud-storage.io)
+//  4. 随机字符域名: random.tld (如 abc123.com)
+//
 // 返回值:
 //   - string: 生成的域名
 //   - error: 生成过程中的错误，一般不会发生错误
@@ -1067,7 +1094,7 @@ func (p *VariableParser) generateRandomIPv6(params string) (string, error) {
 	case "compressed": // 生成压缩格式的IPv6地址（包含::）
 		groups := make([]string, 8)
 		// 生成8组数，确保至少有2组连续的0
-		compressStart := random.Intn(5) + 1 // 不压缩第一组
+		compressStart := random.Intn(5) + 1  // 不压缩第一组
 		compressLength := random.Intn(2) + 2 // 压缩2-3组连续的0
 		for i := range groups {
 			if i >= compressStart && i < compressStart+compressLength {

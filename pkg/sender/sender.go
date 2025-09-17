@@ -24,26 +24,26 @@ import (
 // 5. 资源管理：确保资源的正确分配和释放
 type Sender struct {
 	// 基础配置
-	config      *config.Config      // 配置信息，包含目标地址、协议、并发数等
-	
+	config *config.Config // 配置信息，包含目标地址、协议、并发数等
+
 	// 连接管理
-	connPool    *ConnectionPool     // 连接池，管理与目标服务器的连接，支持连接复用
-	
+	connPool *ConnectionPool // 连接池，管理与目标服务器的连接，支持连接复用
+
 	// 性能控制
-	rateLimiter *RateLimiter       // 速率限制器，控制消息发送速率，防止目标服务器过载
-	
+	rateLimiter *RateLimiter // 速率限制器，控制消息发送速率，防止目标服务器过载
+
 	// 状态监控
-	stats       *Statistics        // 统计信息，记录发送成功/失败数量、运行时间等指标
-	
+	stats *Statistics // 统计信息，记录发送成功/失败数量、运行时间等指标
+
 	// 生命周期管理
-	ctx         context.Context     // 上下文，用于控制发送器的生命周期和优雅停止
-	cancel      context.CancelFunc  // 取消函数，用于触发停止信号
-	wg          sync.WaitGroup      // 等待组，确保所有协程完成后再退出
-	
+	ctx    context.Context    // 上下文，用于控制发送器的生命周期和优雅停止
+	cancel context.CancelFunc // 取消函数，用于触发停止信号
+	wg     sync.WaitGroup     // 等待组，确保所有协程完成后再退出
+
 	// 消息生成
 	templateEngine *template.Engine // 模板引擎，处理消息模板和变量替换
-	dataFile    *os.File           // 数据文件句柄，用于从文件读取消息内容
-	dataScanner *bufio.Scanner     // 数据文件扫描器，支持按行读取数据
+	dataFile       *os.File         // 数据文件句柄，用于从文件读取消息内容
+	dataScanner    *bufio.Scanner   // 数据文件扫描器，支持按行读取数据
 }
 
 // Statistics 统计信息结构体
@@ -55,20 +55,21 @@ type Sender struct {
 // 4. 性能分析：包含时间戳便于计算吞吐率
 type Statistics struct {
 	// 计数器
-	Sent      int64     `json:"sent"`      // 已成功发送的消息数量，原子操作更新
-	Failed    int64     `json:"failed"`    // 发送失败的消息数量，原子操作更新
-	
+	Sent   int64 `json:"sent"`   // 已成功发送的消息数量，原子操作更新
+	Failed int64 `json:"failed"` // 发送失败的消息数量，原子操作更新
+
 	// 时间戳
 	StartTime time.Time `json:"start_time"` // 统计开始时间，用于计算运行时长
 	EndTime   time.Time `json:"end_time"`   // 统计结束时间，用于计算总体性能指标
-	
+
 	// 并发控制
-	mutex     sync.RWMutex                  // 读写锁，保护统计数据的并发访问
+	mutex sync.RWMutex // 读写锁，保护统计数据的并发访问
 }
 
 // NewSender 创建新的发送器实例
 // 参数：
 //   - cfg: 发送器配置信息，包含连接、模板、速率限制等配置
+//
 // 返回值：
 //   - *Sender: 创建的发送器实例
 //   - error: 创建过程中的错误，如果创建成功则为nil
@@ -111,6 +112,7 @@ func (s *Sender) initConnectionPool() error {
 //   - 启动统计监控协程（如果启用）
 //   - 启动多个发送工作协程
 //   - 等待所有协程完成或超时
+//
 // 返回值：
 //   - error: 启动过程中的错误，如果启动成功则为nil
 func (s *Sender) Start() error {
@@ -189,6 +191,7 @@ func (s *Sender) sendWorker(workerID int) {
 //   - 根据配置生成消息内容
 //   - 支持从命令行参数、模板文件或数据文件生成消息
 //   - 自动处理消息格式和变量替换
+//
 // 返回值：
 //   - *syslog.Message: 生成的Syslog消息对象
 //   - error: 生成过程中的错误，如果生成成功则为nil
@@ -208,7 +211,7 @@ func (s *Sender) generateMessage() (*syslog.Message, error) {
 			s.templateEngine = template.NewEngine(configPath, s.config.Verbose)
 			s.templateEngine.LoadTemplate("message", s.config.Message)
 		}
-		
+
 		// 处理消息中的变量
 		content, err = s.templateEngine.GenerateMessage("message")
 		if err != nil {
@@ -237,7 +240,7 @@ func (s *Sender) generateMessage() (*syslog.Message, error) {
 		hostname,
 		"syslog_go",
 		content,
-		syslog.ParseFormat(s.config.Format),
+		"",
 	)
 
 	return msg, nil
@@ -248,8 +251,10 @@ func (s *Sender) generateMessage() (*syslog.Message, error) {
 //   - 从连接池获取连接
 //   - 将消息序列化并发送
 //   - 处理发送过程中的错误
+//
 // 参数：
 //   - msg: 要发送的Syslog消息对象
+//
 // 返回值：
 //   - error: 发送过程中的错误，如果发送成功则为nil
 func (s *Sender) sendMessage(msg *syslog.Message) error {
@@ -278,6 +283,7 @@ func (s *Sender) sendMessage(msg *syslog.Message) error {
 //   - 按行读取数据文件
 //   - 维护当前读取位置，支持循环读取
 //   - 返回下一行数据
+//
 // 返回值：
 //   - string: 读取的行内容
 //   - error: 读取过程中的错误

@@ -23,21 +23,21 @@ import (
 // 5. 调试支持：详细的日志输出功能
 type RawSocketConn struct {
 	// 套接字控制
-	fd         int      // 原始套接字文件描述符
-	closed     bool     // 连接关闭状态
-	verbose    bool     // 是否输出详细日志
-	
+	fd      int  // 原始套接字文件描述符
+	closed  bool // 连接关闭状态
+	verbose bool // 是否输出详细日志
+
 	// 网络地址
-	sourceIP   net.IP   // 源IP地址
-	targetIP   net.IP   // 目标IP地址
-	targetPort int      // 目标端口
-	srcPort    uint16   // 源端口（随机分配）
-	
+	sourceIP   net.IP // 源IP地址
+	targetIP   net.IP // 目标IP地址
+	targetPort int    // 目标端口
+	srcPort    uint16 // 源端口（随机分配）
+
 	// 协议控制
-	protocol   string   // 使用的协议（tcp/udp）
-	connected  bool     // TCP连接状态
-	seqNum     uint32   // TCP序列号
-	ackNum     uint32   // TCP确认号
+	protocol  string // 使用的协议（tcp/udp）
+	connected bool   // TCP连接状态
+	seqNum    uint32 // TCP序列号
+	ackNum    uint32 // TCP确认号
 }
 
 // newRawSocketConn 创建新的原始套接字连接 (Linux版本)
@@ -46,11 +46,13 @@ type RawSocketConn struct {
 //   - 解析和验证源IP和目标地址
 //   - 设置套接字选项和超时
 //   - 支持TCP和UDP协议
+//
 // 参数：
 //   - sourceIP: 源IP地址字符串
 //   - targetAddr: 目标地址字符串（格式：IP:Port）
 //   - protocol: 传输协议（tcp/udp）
 //   - verbose: 是否输出详细日志
+//
 // 返回值：
 //   - *RawSocketConn: 原始套接字连接对象
 //   - error: 创建过程中的错误
@@ -140,6 +142,7 @@ func newRawSocketConn(sourceIP, targetAddr, protocol string, verbose bool) (*Raw
 //   - 处理TCP标志位
 //   - 支持超时重试机制
 //   - 验证数据包的合法性
+//
 // 返回值：
 //   - error: 连接建立过程中的错误
 func (c *RawSocketConn) establishTCPConnection() error {
@@ -232,7 +235,7 @@ func (c *RawSocketConn) establishTCPConnection() error {
 			fmt.Printf("  源IP: %v，目标IP: %v\n", srcIP, dstIP)
 			fmt.Printf("  本地配置 - 源IP: %v，目标IP: %v\n", c.sourceIP, c.targetIP)
 		}
-		
+
 		// 检查数据包是否与当前连接相关
 		// 至少目标IP应该是我们发送SYN包时使用的源IP
 		if !bytes.Equal(dstIP, c.sourceIP.To4()) {
@@ -246,14 +249,14 @@ func (c *RawSocketConn) establishTCPConnection() error {
 		ipHeaderLen := (buf[0] & 0x0F) * 4 // IP头部长度
 		fmt.Printf("IP头部长度: %d字节\n", ipHeaderLen)
 		tcpOffset := ipHeaderLen
-		
+
 		// 检查源端口和目标端口
-		srcPort := binary.BigEndian.Uint16(buf[tcpOffset:tcpOffset+2])
-		dstPort := binary.BigEndian.Uint16(buf[tcpOffset+2:tcpOffset+4])
+		srcPort := binary.BigEndian.Uint16(buf[tcpOffset : tcpOffset+2])
+		dstPort := binary.BigEndian.Uint16(buf[tcpOffset+2 : tcpOffset+4])
 		fmt.Printf("收到的数据包端口信息:\n")
 		fmt.Printf("  源端口: %d，目标端口: %d\n", srcPort, dstPort)
 		fmt.Printf("  本地配置 - 源端口: %d，目标端口: %d\n", c.srcPort, c.targetPort)
-		
+
 		// 检查端口匹配
 		// 对于收到的SYN+ACK包，源端口应该是目标端口，目标端口应该是源端口
 		if srcPort != uint16(c.targetPort) || dstPort != c.srcPort {
@@ -276,7 +279,7 @@ func (c *RawSocketConn) establishTCPConnection() error {
 			fmt.Printf("    ACK: %v\n", tcpFlags&0x10 != 0)
 			fmt.Printf("    URG: %v\n", tcpFlags&0x20 != 0)
 		}
-		
+
 		// 检查是否包含SYN和ACK标志
 		if tcpFlags != 0x12 { // SYN+ACK = 0x12
 			if c.verbose {
@@ -290,7 +293,7 @@ func (c *RawSocketConn) establishTCPConnection() error {
 
 		// 获取确认号和对方的序列号
 		c.ackNum = binary.BigEndian.Uint32(buf[tcpOffset+8:tcpOffset+12]) + 1
-		c.seqNum = binary.BigEndian.Uint32(buf[tcpOffset+4:tcpOffset+8])
+		c.seqNum = binary.BigEndian.Uint32(buf[tcpOffset+4 : tcpOffset+8])
 		if c.verbose {
 			fmt.Printf("收到SYN+ACK包，确认号: %d，序列号: %d\n", c.ackNum, c.seqNum)
 		}
@@ -317,9 +320,11 @@ func (c *RawSocketConn) establishTCPConnection() error {
 //   - 支持各种TCP标志位组合
 //   - 自动计算IP和TCP校验和
 //   - 维护TCP序列号和确认号
+//
 // 参数：
 //   - flags: TCP标志位（如SYN、ACK、PSH等）
 //   - data: 要发送的数据（可选）
+//
 // 返回值：
 //   - error: 发送过程中的错误
 func (c *RawSocketConn) sendTCPPacket(flags uint16, data []byte) error {
@@ -327,8 +332,8 @@ func (c *RawSocketConn) sendTCPPacket(flags uint16, data []byte) error {
 
 	// 构建IP头部
 	ipHeader := make([]byte, 20)
-	ipHeader[0] = 0x45                                  // 版本(4)和头部长度(5)
-	ipHeader[1] = 0x00                                  // 服务类型
+	ipHeader[0] = 0x45 // 版本(4)和头部长度(5)
+	ipHeader[1] = 0x00 // 服务类型
 	ipHeaderLen := 20
 
 	// TCP头部
@@ -337,13 +342,13 @@ func (c *RawSocketConn) sendTCPPacket(flags uint16, data []byte) error {
 	binary.BigEndian.PutUint16(tcpHeader[2:4], uint16(c.targetPort))
 	binary.BigEndian.PutUint32(tcpHeader[4:8], c.seqNum)
 	binary.BigEndian.PutUint32(tcpHeader[8:12], c.ackNum)
-	tcpHeader[12] = 5 << 4                                  // 数据偏移
+	tcpHeader[12] = 5 << 4 // 数据偏移
 	tcpHeader[13] = byte(flags)
-	binary.BigEndian.PutUint16(tcpHeader[14:16], 65535)    // 窗口大小
-	binary.BigEndian.PutUint16(tcpHeader[16:18], 0)        // 校验和
-	binary.BigEndian.PutUint16(tcpHeader[18:20], 0)        // 紧急指针
+	binary.BigEndian.PutUint16(tcpHeader[14:16], 65535) // 窗口大小
+	binary.BigEndian.PutUint16(tcpHeader[16:18], 0)     // 校验和
+	binary.BigEndian.PutUint16(tcpHeader[18:20], 0)     // 紧急指针
 
-	fmt.Printf("TCP头部 - 源端口: %d, 目标端口: %d, 序列号: %d, 确认号: %d\n", 
+	fmt.Printf("TCP头部 - 源端口: %d, 目标端口: %d, 序列号: %d, 确认号: %d\n",
 		c.srcPort, c.targetPort, c.seqNum, c.ackNum)
 
 	// 计算TCP校验和
@@ -401,8 +406,10 @@ func (c *RawSocketConn) sendTCPPacket(flags uint16, data []byte) error {
 //   - 自动处理TCP连接建立
 //   - 手动构建IP和传输层数据包
 //   - 计算校验和确保数据完整性
+//
 // 参数：
 //   - data: 要发送的数据
+//
 // 返回值：
 //   - int: 发送的字节数
 //   - error: 发送过程中的错误
@@ -431,8 +438,8 @@ func (c *RawSocketConn) Write(data []byte) (int, error) {
 	case "udp":
 		// 构建IP头部
 		ipHeader := make([]byte, 20)
-		ipHeader[0] = 0x45                                  // 版本(4)和头部长度(5)
-		ipHeader[1] = 0x00                                  // 服务类型
+		ipHeader[0] = 0x45 // 版本(4)和头部长度(5)
+		ipHeader[1] = 0x00 // 服务类型
 		ipHeaderLen := 20
 
 		// UDP头部
@@ -454,8 +461,8 @@ func (c *RawSocketConn) Write(data []byte) (int, error) {
 		totalLen := uint16(ipHeaderLen + len(udpHeader) + len(data))
 		binary.BigEndian.PutUint16(ipHeader[2:4], totalLen)
 		binary.BigEndian.PutUint16(ipHeader[4:6], uint16(time.Now().UnixNano()&0xFFFF)) // ID字段
-		binary.BigEndian.PutUint16(ipHeader[6:8], 0)                                     // 标志和片偏移
-		ipHeader[8] = 64                                                                  // TTL
+		binary.BigEndian.PutUint16(ipHeader[6:8], 0)                                    // 标志和片偏移
+		ipHeader[8] = 64                                                                // TTL
 		ipHeader[9] = syscall.IPPROTO_UDP                                               // 协议
 		// 校验和字段先设为0
 		binary.BigEndian.PutUint16(ipHeader[10:12], 0)
@@ -494,8 +501,10 @@ func (c *RawSocketConn) Write(data []byte) (int, error) {
 //   - 从原始套接字读取数据
 //   - 由于原始套接字的特性，通常不支持直接读取
 //   - 返回不支持操作的错误
+//
 // 参数：
 //   - b: 用于存储读取数据的缓冲区
+//
 // 返回值：
 //   - int: 读取的字节数
 //   - error: 读取过程中的错误
@@ -508,6 +517,7 @@ func (c *RawSocketConn) Read(b []byte) (int, error) {
 //   - 关闭原始套接字连接
 //   - 释放系统资源
 //   - 支持幂等操作（多次调用安全）
+//
 // 返回值：
 //   - error: 关闭过程中的错误
 func (c *RawSocketConn) Close() error {
@@ -548,8 +558,10 @@ func (c *RawSocketConn) SetWriteDeadline(t time.Time) error {
 //   - 计算IP头部的16位校验和
 //   - 采用Internet校验和算法
 //   - 支持奇数长度的数据
+//
 // 参数：
 //   - header: IP头部数据
+//
 // 返回值：
 //   - uint16: 计算得到的校验和
 func calculateIPChecksum(header []byte) uint16 {
@@ -580,20 +592,22 @@ func calculateIPChecksum(header []byte) uint16 {
 //   - 计算TCP数据包的16位校验和
 //   - 包含TCP伪头部、TCP头部和数据部分
 //   - 支持奇数长度的数据
+//
 // 参数：
 //   - srcIP: 源IP地址
 //   - dstIP: 目标IP地址
 //   - tcpHeader: TCP头部数据
 //   - data: TCP数据部分
+//
 // 返回值：
 //   - uint16: 计算得到的校验和
 func calculateTCPChecksum(srcIP, dstIP net.IP, tcpHeader []byte, data []byte) uint16 {
 	// 1. 构建TCP伪头部（12字节）
 	pseudoHeader := make([]byte, 12)
-	copy(pseudoHeader[0:4], srcIP.To4())                          // 源IP
-	copy(pseudoHeader[4:8], dstIP.To4())                          // 目标IP
-	pseudoHeader[8] = 0                                           // 保留字节
-	pseudoHeader[9] = syscall.IPPROTO_TCP                        // 协议类型
+	copy(pseudoHeader[0:4], srcIP.To4())                                              // 源IP
+	copy(pseudoHeader[4:8], dstIP.To4())                                              // 目标IP
+	pseudoHeader[8] = 0                                                               // 保留字节
+	pseudoHeader[9] = syscall.IPPROTO_TCP                                             // 协议类型
 	binary.BigEndian.PutUint16(pseudoHeader[10:12], uint16(len(tcpHeader)+len(data))) // TCP长度
 
 	// 2. 计算校验和
@@ -633,20 +647,22 @@ func calculateTCPChecksum(srcIP, dstIP net.IP, tcpHeader []byte, data []byte) ui
 //   - 计算UDP数据包的16位校验和
 //   - 包含UDP伪头部、UDP头部和数据部分
 //   - 支持奇数长度的数据
+//
 // 参数：
 //   - srcIP: 源IP地址
 //   - dstIP: 目标IP地址
 //   - udpHeader: UDP头部数据
 //   - data: UDP数据部分
+//
 // 返回值：
 //   - uint16: 计算得到的校验和
 func calculateUDPChecksum(srcIP, dstIP net.IP, udpHeader []byte, data []byte) uint16 {
 	// 1. 构建UDP伪头部（12字节）
 	pseudoHeader := make([]byte, 12)
-	copy(pseudoHeader[0:4], srcIP.To4())                          // 源IP
-	copy(pseudoHeader[4:8], dstIP.To4())                          // 目标IP
-	pseudoHeader[8] = 0                                           // 保留字节
-	pseudoHeader[9] = syscall.IPPROTO_UDP                        // 协议类型
+	copy(pseudoHeader[0:4], srcIP.To4())                                              // 源IP
+	copy(pseudoHeader[4:8], dstIP.To4())                                              // 目标IP
+	pseudoHeader[8] = 0                                                               // 保留字节
+	pseudoHeader[9] = syscall.IPPROTO_UDP                                             // 协议类型
 	binary.BigEndian.PutUint16(pseudoHeader[10:12], uint16(len(udpHeader)+len(data))) // UDP长度
 
 	// 2. 计算校验和

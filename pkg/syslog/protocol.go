@@ -4,9 +4,9 @@ package syslog
 
 import (
 	"fmt"
-	"regexp"    // 用于正则表达式匹配
-	"strings"   // 字符串处理
-	"time"      // 时间处理
+	"regexp"  // 用于正则表达式匹配
+	"strings" // 字符串处理
+	"time"    // 时间处理
 )
 
 // SyslogFormat 定义Syslog格式类型
@@ -38,12 +38,13 @@ type Message struct {
 //   - tag: 程序名称
 //   - content: 消息内容
 //   - format: Syslog格式（RFC3164或RFC5424）
+//
 // 返回值：
 //   - *Message: 新创建的Syslog消息对象
 func NewMessage(priority int, hostname, tag, content string, format SyslogFormat) *Message {
 	return &Message{
 		Priority:     priority,
-		Timestamp:    time.Now(),         // 使用当前时间
+		Timestamp:    time.Now(), // 使用当前时间
 		Hostname:     hostname,
 		Tag:          tag,
 		Content:      content,
@@ -59,8 +60,10 @@ func (m *Message) Format() string {
 	switch m.SyslogFormat {
 	case RFC5424:
 		return m.formatRFC5424()
-	default:
+	case RFC3164:
 		return m.formatRFC3164()
+	default:
+		return m.Content
 	}
 }
 
@@ -89,11 +92,11 @@ func (m *Message) formatRFC3164() string {
 
 	// 组装最终的消息格式
 	return fmt.Sprintf("<%d>%s %s %s: %s",
-		m.Priority,  // 优先级
-		timestamp,   // 时间戳
-		m.Hostname,  // 主机名
-		tagPart,     // 标签（可能包含PID）
-		m.Content)   // 消息内容
+		m.Priority, // 优先级
+		timestamp,  // 时间戳
+		m.Hostname, // 主机名
+		tagPart,    // 标签（可能包含PID）
+		m.Content)  // 消息内容
 }
 
 // formatRFC5424 格式化为RFC5424格式
@@ -127,14 +130,14 @@ func (m *Message) formatRFC5424() string {
 
 	// 组装最终的消息格式
 	return fmt.Sprintf("<%d>1 %s %s %s %s %s %s %s",
-		m.Priority,      // 优先级
-		timestamp,       // ISO格式的时间戳
-		hostname,        // 主机名
-		appName,         // 应用名称
-		procID,          // 进程ID
-		msgID,           // 消息ID
-		structuredData,  // 结构化数据
-		m.Content)       // 消息内容
+		m.Priority,     // 优先级
+		timestamp,      // ISO格式的时间戳
+		hostname,       // 主机名
+		appName,        // 应用名称
+		procID,         // 进程ID
+		msgID,          // 消息ID
+		structuredData, // 结构化数据
+		m.Content)      // 消息内容
 }
 
 // ParseRFC3164 解析RFC3164格式的syslog消息
@@ -144,6 +147,7 @@ func (m *Message) formatRFC5424() string {
 //
 // 参数：
 //   - msg: 要解析的Syslog消息字符串
+//
 // 返回值：
 //   - *Message: 解析成功后的消息对象
 //   - error: 解析过程中的错误，如果格式不正确则返回错误
@@ -195,6 +199,7 @@ func ParseRFC3164(msg string) (*Message, error) {
 //
 // 参数：
 //   - msg: 要解析的Syslog消息字符串
+//
 // 返回值：
 //   - *Message: 解析成功后的消息对象
 //   - error: 解析过程中的错误，如果格式不正确则返回错误
@@ -335,11 +340,14 @@ func (m *Message) String() string {
 // ParseFormat 解析格式字符串
 // 参数：
 //   - format: 要解析的格式字符串，支持"rfc3164"、"rfc5424"和"5424"（不区分大小写）
+//
 // 返回值：
 //   - SyslogFormat: 解析后的Syslog格式，默认返回RFC3164格式
+//
 // 说明：
-//   该函数将输入的格式字符串转换为对应的SyslogFormat类型
-//   如果输入的格式不能识别，将默认返回RFC3164格式
+//
+//	该函数将输入的格式字符串转换为对应的SyslogFormat类型
+//	如果输入的格式不能识别，将默认返回RFC3164格式
 func ParseFormat(format string) SyslogFormat {
 	switch strings.ToLower(format) {
 	case "rfc5424", "5424":

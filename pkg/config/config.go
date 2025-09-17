@@ -47,7 +47,7 @@ func DefaultConfig() *Config {
 		Target:        "localhost:514",
 		SourceIP:      "",
 		Protocol:      "udp",
-		Format:        "rfc5424",
+		Format:        "",
 		Facility:      16, // local0
 		Severity:      6,  // info
 		EPS:           10,

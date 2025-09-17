@@ -18,18 +18,18 @@ import (
 // 5. 源地址模拟：支持指定源IP地址（需要root权限）
 type ConnectionPool struct {
 	// 基础配置
-	address     string         // 目标服务器地址，格式：host:port
-	protocol    string         // 网络协议，支持tcp和udp
-	maxSize     int           // 连接池最大容量
-	timeout     time.Duration // 连接超时时间
-	
+	address  string        // 目标服务器地址，格式：host:port
+	protocol string        // 网络协议，支持tcp和udp
+	maxSize  int           // 连接池最大容量
+	timeout  time.Duration // 连接超时时间
+
 	// 连接管理
 	connections chan net.Conn // 连接通道，用于存储和分发连接
 	mutex       sync.RWMutex  // 读写锁，保护并发访问
-	closed      bool         // 连接池状态标志
-	
+	closed      bool          // 连接池状态标志
+
 	// 高级功能
-	sourceIP    string       // 源IP地址，用于IP伪装，为空则使用系统默认地址
+	sourceIP string // 源IP地址，用于IP伪装，为空则使用系统默认地址
 }
 
 // NewConnectionPool 创建新的连接池
@@ -83,7 +83,7 @@ func (p *ConnectionPool) createConnection() (net.Conn, error) {
 				}
 			}
 		}
-		
+
 		// 如果指定了源IP地址且不是本机IP，尝试使用原始套接字
 		if p.sourceIP != "" && !isLocalIP(p.sourceIP) {
 			fmt.Printf("尝试使用原始套接字模拟源IP地址: %s\n", p.sourceIP)
@@ -97,12 +97,12 @@ func (p *ConnectionPool) createConnection() (net.Conn, error) {
 			}
 			return rawConn, nil
 		}
-		
+
 		// 使用Dialer以支持设置源IP地址
 		dialer := &net.Dialer{
 			Timeout: p.timeout,
 		}
-		
+
 		// 如果指定了源IP地址且为本机IP，设置本地地址
 		if p.sourceIP != "" && isLocalIP(p.sourceIP) {
 			var localAddr net.Addr
@@ -115,7 +115,7 @@ func (p *ConnectionPool) createConnection() (net.Conn, error) {
 				dialer.LocalAddr = localAddr
 			}
 		}
-		
+
 		return dialer.Dial(network, p.address)
 	}
 	return nil, fmt.Errorf("不支持的协议: %s", p.protocol)

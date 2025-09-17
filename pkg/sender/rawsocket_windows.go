@@ -23,13 +23,13 @@ const (
 
 // RawSocketConn Windows版本的原始套接字连接
 type RawSocketConn struct {
-	fd       syscall.Handle
-	sourceIP net.IP
-	targetIP net.IP
+	fd         syscall.Handle
+	sourceIP   net.IP
+	targetIP   net.IP
 	targetPort int
-	protocol string
-	closed   bool
-	verbose  bool     // 是否输出详细日志
+	protocol   string
+	closed     bool
+	verbose    bool // 是否输出详细日志
 }
 
 // NewRawSocketConn 创建新的原始套接字连接 (Windows版本)
