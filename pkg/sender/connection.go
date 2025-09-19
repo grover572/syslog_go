@@ -280,16 +280,37 @@ func isLocalIP(ip string) bool {
 }
 
 // RateLimiter 速率限制器
+//
+// 这个速率限制器不使用传统的“令牌桶”算法（即一个单独的goroutine持续生成令牌），
+// 而是采用了一种基于“下次允许通行时间”的计算方法。
 type RateLimiter struct {
-	rate     int64         // 每秒允许的请求数
-	interval time.Duration // 请求间隔
-	lastTime time.Time     // 上次请求时间
-	mutex    sync.Mutex    // 互斥锁
+	rate     int64         // 每秒允许的请求数 (EPS)
+	interval time.Duration // 根据rate计算出的、两次请求之间必须经过的最小时间间隔。
+
+	lastTime time.Time // 记录“理论上”上次请求应该发生的时间点。
+	// 这不是上次请求的实际发生时间，而是基于interval累加的、理想的、平滑的时间点。
+
+	mutex sync.Mutex // 互斥锁，用于保护lastTime的并发读写，确保线程安全。
 }
 
 // NewRateLimiter 创建新的速率限制器
 func NewRateLimiter(ratePerSecond int) *RateLimiter {
+	// 如果速率小于或等于0，则不进行速率限制。
+	// 这作为一个安全检查，尽管调用方通常会保证速率是正数。
+	if ratePerSecond <= 0 {
+		return nil
+	}
+
+	// 计算时间间隔。
 	interval := time.Second / time.Duration(ratePerSecond)
+
+	// 如果计算出的间隔为0，意味着速率过高（大于1,000,000,000 EPS），
+	// 这会在 Wait() 方法中导致除以零的错误。
+	// 在这种情况下，我们返回 nil，相当于不进行速率限制，因为这实际上就是“无限速率”的意图。
+	if interval == 0 {
+		return nil
+	}
+
 	return &RateLimiter{
 		rate:     int64(ratePerSecond),
 		interval: interval,
@@ -313,24 +334,72 @@ func (rl *RateLimiter) Allow() bool {
 	return false
 }
 
-// Wait 等待直到允许请求
+// Wait 等待直到允许下一次请求。
+// 这是速率控制的核心。每个工作协程在发送消息前都必须调用此方法。
+//
+// 方法逻辑：
+// 1. 计算当前时间与“理论上次发送时间”（lastTime）的差距。
+// 2. 如果差距已经超过了预设的最小间隔（interval），说明可以立即发送，然后更新“理论下次发送时间”。
+// 3. 如果差距小于最小间隔，说明发送过快，需要计算还需等待多久，然后Sleep等待。
 func (rl *RateLimiter) Wait() {
+	// 加锁，确保同一时间只有一个goroutine能修改lastTime。
+	// 这防止了多个协程同时计算等待时间，导致速率失控。
 	rl.mutex.Lock()
+
+	// 获取当前时间
 	now := time.Now()
+
+	// 计算当前时间与“理论上次发送时间”之间已经过去的时间。
 	elapsed := now.Sub(rl.lastTime)
+
+	// --- 核心判断 ---
+	// 如果 `elapsed` 大于或等于 `interval`，意味着：
+	// 1. 这是第一次请求。
+	// 2. 或者距离上次请求已经过去了足够长的时间，甚至超过了预设的间隔。
+	// 此时，我们不需要等待。
 	if elapsed >= rl.interval {
-		// 如果距离上次发送时间超过了多个间隔，调整lastTime以保持期望速率
+		// 更新 `lastTime`。
+		// 这里的关键在于，我们不是简单地把 `lastTime` 设置为 `now`（当前时间）。
+		// 而是计算从上次理论时间到现在，可以“累积”多少个发送间隔。
+		// `rl.lastTime.Add(intervals * rl.interval)` 的作用是“追赶”时间，
+		// 将 `lastTime` 校准到一个新的、理想的、平滑的时间点上。
+		//
+		// 这样做可以防止因为程序处理延迟或CPU繁忙导致长时间没有发送，
+		// 然后突然产生大量“补偿性”的爆发式发送。它能确保速率的长期平滑。
 		intervals := elapsed / rl.interval
 		rl.lastTime = rl.lastTime.Add(intervals * rl.interval)
-	} else {
-		// 计算需要等待的时间
-		waitTime := rl.interval - elapsed
+
+		// 解锁并立即返回，允许当前协程发送消息。
 		rl.mutex.Unlock()
-		time.Sleep(waitTime)
-		rl.mutex.Lock()
-		rl.lastTime = rl.lastTime.Add(rl.interval)
+		return
 	}
+
+	// 如果程序执行到这里，意味着 `elapsed < interval`。
+	// 说明当前协程来得太早了，需要等待。
+
+	// 计算还需要等待多久才能达到一个完整的 `interval` 间隔。
+	waitDuration := rl.interval - elapsed
+
+	// 预先更新“理论下次发送时间”。
+	// 我们将 `lastTime` 向前推进一个 `interval` 的长度。
+	// 这相当于为当前这次请求“预定”了它的发送时间点。
+	// 下一个到达的协程将会基于这个新的 `lastTime` 来计算它自己的等待时间。
+	rl.lastTime = rl.lastTime.Add(rl.interval)
+
+	// 解锁。在Sleep之前解锁，这样其他协程就可以进来计算它们的等待时间，
+	// 而不必等待当前协程Sleep结束。这提高了并发性。
 	rl.mutex.Unlock()
+
+	// 执行等待。让当前协程暂停执行，等待 `waitDuration` 的时间。
+	time.Sleep(waitDuration)
+}
+
+// RateLimiterV2 使用令牌桶算法的速率限制器
+type RateLimiterV2 struct {
+	rate     int64         // 每秒允许的请求数
+	interval time.Duration // 请求间隔
+	lastTime time.Time     // 上次请求时间
+	mutex    sync.Mutex    // 互斥锁
 }
 
 // SetRate 设置新的速率
