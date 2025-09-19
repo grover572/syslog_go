@@ -247,6 +247,7 @@ var sendCmd = &cobra.Command{
 		cfg.Facility = viper.GetInt("facility")
 		cfg.Severity = viper.GetInt("severity")
 		cfg.Verbose = viper.GetBool("verbose")
+		cfg.Encoding = strings.ToLower(viper.GetString("charset"))
 
 		// 如果指定了消息内容，直接设置到配置中
 		if message != "" {
@@ -296,6 +297,7 @@ func init() {
 	sendCmd.Flags().DurationP("duration", "d", 60*time.Second, "发送持续时间")
 	sendCmd.Flags().StringP("format", "f", "rfc3164", "日志格式 (rfc3164/rfc5424)")
 	sendCmd.Flags().StringP("data-file", "D", "", "数据文件")
+	sendCmd.Flags().StringP("charset", "c", "utf-8", "字符集/编码 (utf-8/gbk)")
 	// sendCmd.Flags().IntP("facility", "L", 16, "Syslog Facility (0-23)")
 	// sendCmd.Flags().IntP("severity", "S", 6, "Syslog Severity (0-7)")
 	sendCmd.Flags().BoolP("verbose", "v", false, "显示详细信息")
@@ -308,6 +310,7 @@ func init() {
 	viper.BindPFlag("duration", sendCmd.Flags().Lookup("duration"))
 	viper.BindPFlag("format", sendCmd.Flags().Lookup("format"))
 	viper.BindPFlag("data_file", sendCmd.Flags().Lookup("data-file"))
+	viper.BindPFlag("charset", sendCmd.Flags().Lookup("charset"))
 	// viper.BindPFlag("facility", sendCmd.Flags().Lookup("facility"))
 	// viper.BindPFlag("severity", sendCmd.Flags().Lookup("severity"))
 	viper.BindPFlag("verbose", sendCmd.Flags().Lookup("verbose"))

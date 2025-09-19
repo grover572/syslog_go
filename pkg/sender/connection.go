@@ -30,10 +30,11 @@ type ConnectionPool struct {
 
 	// 高级功能
 	sourceIP string // 源IP地址，用于IP伪装，为空则使用系统默认地址
+	verbose  bool   // 是否输出详细日志（用于打印所用网卡等）
 }
 
 // NewConnectionPool 创建新的连接池
-func NewConnectionPool(address, protocol string, maxSize int, timeout time.Duration, sourceIP string) (*ConnectionPool, error) {
+func NewConnectionPool(address, protocol string, maxSize int, timeout time.Duration, sourceIP string, verbose bool) (*ConnectionPool, error) {
 	pool := &ConnectionPool{
 		address:     address,
 		protocol:    protocol,
@@ -41,6 +42,7 @@ func NewConnectionPool(address, protocol string, maxSize int, timeout time.Durat
 		timeout:     timeout,
 		connections: make(chan net.Conn, maxSize),
 		sourceIP:    sourceIP,
+		verbose:     verbose,
 	}
 
 	// 预创建连接
@@ -93,7 +95,22 @@ func (p *ConnectionPool) createConnection() (net.Conn, error) {
 				fmt.Printf("警告: 创建原始套接字失败: %v\n", err)
 				fmt.Printf("回退到标准连接，使用系统默认地址\n")
 				// 回退到标准连接，不设置源IP
-				return (&net.Dialer{Timeout: p.timeout}).Dial(network, p.address)
+				baseDialer := &net.Dialer{Timeout: p.timeout}
+				conn, derr := baseDialer.Dial(network, p.address)
+				if derr != nil {
+					return nil, derr
+				}
+				p.logInterfaceForConn(conn)
+				return conn, nil
+			}
+			if p.verbose {
+				// 尝试根据源IP解析本地网卡名称（仅当源IP是本机IP时有效）
+				name := lookupInterfaceNameByIP(net.ParseIP(p.sourceIP))
+				if name != "" && isLocalIP(p.sourceIP) {
+					fmt.Printf("使用原始套接字 使用网卡: %s 源IP: %s -> 目标: %s 协议: %s\n", name, p.sourceIP, p.address, p.protocol)
+				} else {
+					fmt.Printf("使用原始套接字 源IP: %s -> 目标: %s 协议: %s（若为非本机IP，出口网卡由路由决定）\n", p.sourceIP, p.address, p.protocol)
+				}
 			}
 			return rawConn, nil
 		}
@@ -116,7 +133,12 @@ func (p *ConnectionPool) createConnection() (net.Conn, error) {
 			}
 		}
 
-		return dialer.Dial(network, p.address)
+		conn, err := dialer.Dial(network, p.address)
+		if err != nil {
+			return nil, err
+		}
+		p.logInterfaceForConn(conn)
+		return conn, nil
 	}
 	return nil, fmt.Errorf("不支持的协议: %s", p.protocol)
 }
@@ -416,4 +438,55 @@ func (rl *RateLimiter) GetRate() int64 {
 	rl.mutex.Lock()
 	defer rl.mutex.Unlock()
 	return rl.rate
+}
+
+// 辅助：记录连接所用网卡/本地地址
+func (p *ConnectionPool) logInterfaceForConn(conn net.Conn) {
+	if !p.verbose || conn == nil {
+		return
+	}
+	la := conn.LocalAddr()
+	var ip net.IP
+	switch a := la.(type) {
+	case *net.TCPAddr:
+		ip = a.IP
+	case *net.UDPAddr:
+		ip = a.IP
+	}
+	name := lookupInterfaceNameByIP(ip)
+	if name != "" {
+		fmt.Printf("已建立连接 使用网卡: %s 本地地址: %s -> 目标: %s 协议: %s\n", name, la.String(), p.address, p.protocol)
+	} else {
+		fmt.Printf("已建立连接 本地地址: %s -> 目标: %s 协议: %s\n", la.String(), p.address, p.protocol)
+	}
+}
+
+// 根据本地IP查找网卡名称（跨平台尽力而为）
+func lookupInterfaceNameByIP(ip net.IP) string {
+	if ip == nil || ip.IsUnspecified() {
+		return ""
+	}
+	ifs, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, ifi := range ifs {
+		addrs, err := ifi.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			switch v := a.(type) {
+			case *net.IPNet:
+				if v.IP != nil && v.IP.Equal(ip) {
+					return ifi.Name
+				}
+			case *net.IPAddr:
+				if v.IP != nil && v.IP.Equal(ip) {
+					return ifi.Name
+				}
+			}
+		}
+	}
+	return ""
 }

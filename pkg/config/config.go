@@ -22,6 +22,7 @@ type Config struct {
 	// 发送控制
 	EPS      int           `mapstructure:"eps" yaml:"eps"`           // 每秒事件数
 	Duration time.Duration `mapstructure:"duration" yaml:"duration"` // 发送持续时间
+	Encoding string        `mapstructure:"encoding" yaml:"encoding"` // 字符编码: utf-8/gbk
 
 	// 数据源配置
 	TemplateDir  string `mapstructure:"template_dir" yaml:"template_dir"`   // 模板目录
@@ -52,6 +53,7 @@ func DefaultConfig() *Config {
 		Severity:      6,  // info
 		EPS:           10,
 		Duration:      60 * time.Second,
+		Encoding:      "utf-8",
 		TemplateDir:   "./data/templates",
 		TemplateFile:  "",
 		DataFile:      "",
@@ -103,6 +105,10 @@ func (c *Config) Validate() error {
 
 	if c.Format != "rfc3164" && c.Format != "rfc5424" {
 		return fmt.Errorf("格式必须是 rfc3164 或 rfc5424")
+	}
+
+	if c.Encoding != "utf-8" && c.Encoding != "gbk" {
+		return fmt.Errorf("编码必须是 utf-8 或 gbk")
 	}
 
 	if c.Facility < 0 || c.Facility > 23 {

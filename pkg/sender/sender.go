@@ -103,6 +103,7 @@ func (s *Sender) initConnectionPool() error {
 		s.config.Concurrency,
 		s.config.Timeout,
 		s.config.SourceIP,
+		s.config.Verbose,
 	)
 	return err
 }

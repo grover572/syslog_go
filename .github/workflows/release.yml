@@ -35,20 +35,13 @@ jobs:
             echo "VERSION=${{ github.event.inputs.version || '0.0.1' }}" >> $GITHUB_ENV
           fi
 
-      - name: Build all platforms
+      - name: Build Linux
         shell: bash
         run: |
-          # Build for Windows
-          GOOS=windows GOARCH=amd64 go build -o syslog_go-windows-amd64.exe
-          GOOS=windows GOARCH=arm64 go build -o syslog_go-windows-arm64.exe
-
-          # Build for Linux
+          set -e
+          # Build for Linux only
           GOOS=linux GOARCH=amd64 go build -o syslog_go-linux-amd64
           GOOS=linux GOARCH=arm64 go build -o syslog_go-linux-arm64
-
-          # Build for macOS
-          GOOS=darwin GOARCH=amd64 go build -o syslog_go-darwin-amd64
-          GOOS=darwin GOARCH=arm64 go build -o syslog_go-darwin-arm64
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
